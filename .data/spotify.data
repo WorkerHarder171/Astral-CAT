@@ -1,0 +1,8 @@
+{
+    "client_id": "f72c5a79d1b34693aa321fc947d9e86d",
+    "client_secret": "6c01cb40d9b447cba0ec95f8506eb3a3",
+    "redirect_url": "https://localhost:8080",
+    "expires_in": null,
+    "expiry": null,
+    "market": "ID"
+}
