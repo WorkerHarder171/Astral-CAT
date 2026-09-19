@@ -1,11 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Events } = require('discord.js');
 
-const { DisTube } = require('distube');
-// const { YouTubePlugin } = require('@distube/youtube');
-const { YtDlpPlugin } = require('@distube/yt-dlp');
-const ffmpeg = require('ffmpeg-static');
-
 // Modul Lokal (Arahkan ke modul YouTube handler yang baru)
 const musicModule = require('./music-player/music');
 const welcomeModule = require('./welcome');
@@ -34,21 +29,6 @@ const client = new Client({
     ]
 });
 
-// Inisialisasi DisTube tanpa plugin Spotify
-const distube = new DisTube(client, {
-    emitNewSongOnly: true,
-
-    ffmpeg: {
-        path: ffmpeg
-    },
-
-    plugins: [
-        new YtDlpPlugin({
-            update: false
-        })
-    ]
-});
-
 client.once(Events.ClientReady, () => {
     console.log(`========================================`);
     console.log(`🤖 Bot ${client.user.tag} online!`);
@@ -71,7 +51,7 @@ client.on(Events.MessageCreate, async (message) => {
         await handleAnnounce(message, command, args);
     } 
     else if (['play', 'p', 'skip', 's', 'pause', 'resume', 'stop', 'dc', 'leave', 'queue', 'q', 'np', 'nowplaying'].includes(command)) {
-        await handleMusicCommands(message, command, args, distube, musicModule);
+        await handleMusicCommands(message, command, args, musicModule);
     } 
     else if (['test-welcome', 'testwelcome', 'setup-welcome'].includes(command)) {
         await handleWelcomeCommands(message, command, welcomeModule, (id) => welcomeChannelId = id);

@@ -1,5 +1,19 @@
-const { EmbedBuilder } = require('discord.js');
-const youtubedl = require('yt-dlp-exec');
+const { spawn } = require('child_process');
+const ytdlp = require('yt-dlp-exec');
+const {
+    joinVoiceChannel,
+    getVoiceConnection,
+    createAudioPlayer,
+    createAudioResource,
+    AudioPlayerStatus,
+    NoSubscriberBehavior,
+    StreamType
+} = require('@discordjs/voice');
+
+const players = new Map();
+const processes = new Map();
+
+const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 
 function isYoutubeUrl(query) {
     try {
@@ -10,274 +24,456 @@ function isYoutubeUrl(query) {
             'www.youtube.com',
             'm.youtube.com',
             'youtu.be'
-        ].includes(url.hostname);
+        ].includes(url.hostname.toLowerCase());
     } catch {
         return false;
     }
 }
 
 async function searchYoutube(query) {
-    const result = await youtubedl(
+    console.log(`Searching YouTube with yt-dlp: ${query}`);
+
+    const result = await ytdlp(
         `ytsearch1:${query}`,
         {
             dumpSingleJson: true,
             noWarnings: true,
             skipDownload: true,
-            flatPlaylist: true
+            flatPlaylist: true,
+            noCallHome: true
         }
     );
 
     if (!result) {
-        throw new Error('Tidak ada hasil pencarian YouTube.');
+        throw new Error('YouTube search returned no result');
     }
 
-    let video = result;
+    const video = result.entries?.[0] || result;
 
-    if (result.entries && result.entries.length > 0) {
-        video = result.entries[0];
+    if (!video?.id) {
+        throw new Error('YouTube video ID not found');
     }
 
-    if (!video) {
-        throw new Error('Video tidak ditemukan.');
+    const url = `https://www.youtube.com/watch?v=${video.id}`;
+
+    console.log(`YouTube result: ${url}`);
+
+    return {
+        id: video.id,
+        title: video.title || 'Unknown title',
+        url
+    };
+}
+
+function cleanupProcesses(guildId) {
+    const processes = processesMap.get(guildId);
+
+    if (!processes) {
+        return;
     }
 
-    if (video.webpage_url) {
-        return video.webpage_url;
+    const { ytdlpProcess, ffmpeg } = processes;
+
+    try {
+        if (ytdlpProcess && !ytdlpProcess.killed) {
+            ytdlpProcess.kill();
+        }
+    } catch (error) {
+        console.error('Failed to kill yt-dlp:', error);
     }
 
-    if (video.url && video.url.startsWith('http')) {
-        return video.url;
+    try {
+        if (ffmpeg && !ffmpeg.killed) {
+            ffmpeg.kill();
+        }
+    } catch (error) {
+        console.error('Failed to kill FFmpeg:', error);
     }
 
-    if (video.id) {
-        return `https://www.youtube.com/watch?v=${video.id}`;
+    processesMap.delete(guildId);
+}
+
+const processesMap = new Map();
+
+function createFFmpegProcess() {
+    const args = [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+
+        '-i',
+        'pipe:0',
+
+        '-f',
+        's16le',
+
+        '-ar',
+        '48000',
+
+        '-ac',
+        '2',
+
+        'pipe:1'
+    ];
+
+    console.log(`Starting FFmpeg: ${FFMPEG_PATH}`);
+
+    const ffmpeg = spawn(FFMPEG_PATH, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        windowsHide: true
+    });
+
+    return ffmpeg;
+}
+
+async function getAudioStream(url, guildId = null) {
+    console.log(`Getting audio stream with yt-dlp: ${url}`);
+
+    const ytdlpProcess = ytdlp.exec(
+        url,
+        {
+            format: 'bestaudio/best',
+            output: '-',
+            quiet: true,
+            noWarnings: true,
+            noCheckCertificates: true,
+            noCallHome: true
+        },
+        {
+            stdio: ['ignore', 'pipe', 'pipe']
+        }
+    );
+
+    const ffmpeg = createFFmpegProcess();
+
+    if (guildId) {
+        processesMap.set(guildId, {
+            ytdlpProcess,
+            ffmpeg
+        });
     }
 
-    throw new Error('URL video tidak ditemukan.');
+    ytdlpProcess.stderr.on('data', (data) => {
+        const message = data.toString().trim();
+
+        if (message) {
+            console.error(`[yt-dlp] ${message}`);
+        }
+    });
+
+    ffmpeg.stderr.on('data', (data) => {
+        const message = data.toString().trim();
+
+        if (message) {
+            console.error(`[FFmpeg] ${message}`);
+        }
+    });
+
+    ytdlpProcess.on('error', (error) => {
+        console.error('yt-dlp process error:', error);
+    });
+
+    ffmpeg.on('error', (error) => {
+        console.error('FFmpeg process error:', error);
+
+        if (error.code === 'ENOENT') {
+            console.error(
+                `FFmpeg tidak ditemukan: ${FFMPEG_PATH}`
+            );
+        }
+    });
+
+    ytdlpProcess.stdout.on('error', (error) => {
+        console.error('yt-dlp stdout error:', error);
+    });
+
+    ffmpeg.stdin.on('error', (error) => {
+        if (error.code !== 'EPIPE') {
+            console.error('FFmpeg stdin error:', error);
+        }
+    });
+
+    ffmpeg.stdout.on('error', (error) => {
+        console.error('FFmpeg stdout error:', error);
+    });
+
+    ytdlpProcess.stdout.pipe(ffmpeg.stdin);
+
+    ytdlpProcess.on('close', (code) => {
+        console.log(`yt-dlp exited with code ${code}`);
+
+        try {
+            if (!ffmpeg.stdin.destroyed) {
+                ffmpeg.stdin.end();
+            }
+        } catch (error) {
+            console.error('Failed to close FFmpeg stdin:', error);
+        }
+    });
+
+    ffmpeg.on('close', (code, signal) => {
+        console.log(
+            `FFmpeg exited with code ${code}` +
+            `${signal ? `, signal ${signal}` : ''}`
+        );
+
+        if (guildId) {
+            const current = processesMap.get(guildId);
+
+            if (
+                current &&
+                current.ytdlpProcess === ytdlpProcess &&
+                current.ffmpeg === ffmpeg
+            ) {
+                processesMap.delete(guildId);
+            }
+        }
+    });
+
+    return ffmpeg;
+}
+
+async function play(message, args) {
+    if (!message.member?.voice?.channel) {
+        return message.reply(
+            'Kamu harus masuk voice channel terlebih dahulu.'
+        );
+    }
+
+    if (!args.length) {
+        return message.reply(
+            'Masukkan judul lagu atau URL YouTube.'
+        );
+    }
+
+    const voiceChannel = message.member.voice.channel;
+    const guildId = message.guild.id;
+
+    let song;
+
+    try {
+        const query = args.join(' ').trim();
+
+        if (isYoutubeUrl(query)) {
+            song = {
+                url: query,
+                title: query
+            };
+        } else {
+            song = await searchYoutube(query);
+        }
+
+        console.log(`Playing YouTube: ${song.url}`);
+
+        let connection = getVoiceConnection(guildId);
+
+        if (!connection) {
+            connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId,
+                adapterCreator: message.guild.voiceAdapterCreator,
+                selfDeaf: true,
+                selfMute: false
+            });
+        }
+
+        let player = players.get(guildId);
+
+        if (!player) {
+            player = createAudioPlayer({
+                behaviors: {
+                    noSubscriber: NoSubscriberBehavior.Play
+                }
+            });
+
+            players.set(guildId, player);
+
+            player.on('error', (error) => {
+                console.error(
+                    `Audio player error [${guildId}]:`,
+                    error
+                );
+
+                cleanupProcesses(guildId);
+            });
+        }
+
+        connection.subscribe(player);
+
+        cleanupProcesses(guildId);
+
+        const ffmpeg = await getAudioStream(
+            song.url,
+            guildId
+        );
+
+        const resource = createAudioResource(
+            ffmpeg.stdout,
+            {
+                inputType: StreamType.Raw,
+                inlineVolume: false
+            }
+        );
+
+        player.play(resource);
+
+        const idleHandler = () => {
+            cleanupProcesses(guildId);
+            player.removeListener(
+                AudioPlayerStatus.Idle,
+                idleHandler
+            );
+        };
+
+        player.once(
+            AudioPlayerStatus.Idle,
+            idleHandler
+        );
+
+        return message.reply(
+            `▶️ Memutar **${song.title || song.url}**`
+        );
+    } catch (error) {
+        console.error(
+            'YouTube stream error:',
+            error
+        );
+
+        cleanupProcesses(guildId);
+
+        return message.reply(
+            `❌ Gagal memutar lagu.\n\`${error.message}\``
+        );
+    }
+}
+
+async function skip(message) {
+    const guildId = message.guild.id;
+    const player = players.get(guildId);
+
+    if (!player) {
+        return message.reply(
+            'Tidak ada lagu yang sedang diputar.'
+        );
+    }
+
+    cleanupProcesses(guildId);
+
+    player.stop(true);
+
+    return message.reply(
+        '⏭️ Lagu dilewati.'
+    );
+}
+
+async function pause(message) {
+    const player = players.get(message.guild.id);
+
+    if (!player) {
+        return message.reply(
+            'Tidak ada lagu yang sedang diputar.'
+        );
+    }
+
+    if (player.state.status === AudioPlayerStatus.Paused) {
+        return message.reply(
+            '⏸️ Musik sudah dijeda.'
+        );
+    }
+
+    player.pause();
+
+    return message.reply(
+        '⏸️ Musik dijeda.'
+    );
+}
+
+async function resume(message) {
+    const player = players.get(message.guild.id);
+
+    if (!player) {
+        return message.reply(
+            'Tidak ada lagu yang sedang diputar.'
+        );
+    }
+
+    if (player.state.status !== AudioPlayerStatus.Paused) {
+        return message.reply(
+            '▶️ Musik tidak sedang dijeda.'
+        );
+    }
+
+    player.unpause();
+
+    return message.reply(
+        '▶️ Musik dilanjutkan.'
+    );
+}
+
+async function stop(message) {
+    const guildId = message.guild.id;
+    const player = players.get(guildId);
+
+    cleanupProcesses(guildId);
+
+    if (player) {
+        player.stop(true);
+        players.delete(guildId);
+    }
+
+    const connection = getVoiceConnection(guildId);
+
+    if (connection) {
+        connection.destroy();
+    }
+
+    return message.reply(
+        '⏹️ Musik dihentikan dan bot keluar dari voice channel.'
+    );
+}
+
+async function queue(message) {
+    return message.reply(
+        'Queue belum diaktifkan.'
+    );
+}
+
+async function nowPlaying(message) {
+    const player = players.get(message.guild.id);
+
+    if (!player) {
+        return message.reply(
+            'ℹ️ Tidak ada lagu yang sedang diputar.'
+        );
+    }
+
+    const status = player.state.status;
+
+    if (status === AudioPlayerStatus.Playing) {
+        return message.reply(
+            '🎵 Musik sedang diputar.'
+        );
+    }
+
+    if (status === AudioPlayerStatus.Paused) {
+        return message.reply(
+            '⏸️ Musik sedang dijeda.'
+        );
+    }
+
+    return message.reply(
+        'ℹ️ Tidak ada lagu yang sedang diputar.'
+    );
 }
 
 module.exports = {
-    handlePlayYoutube: async (message, args, distube) => {
-        const query = args.join(' ').trim();
-
-        if (!query) {
-            return message.reply(
-                '❌ Masukkan judul lagu atau link YouTube!'
-            );
-        }
-
-        const voiceChannel = message.member.voice.channel;
-
-        if (!voiceChannel) {
-            return message.reply(
-                '❌ Kamu harus berada di voice channel terlebih dahulu!'
-            );
-        }
-
-        const loadingMsg = await message.reply(
-            `🔍 Mencari lagu **"${query}"** di YouTube...`
-        );
-
-        try {
-            let videoUrl = query;
-
-            /*
-             * Jika input bukan URL YouTube,
-             * lakukan pencarian menggunakan yt-dlp.
-             *
-             * Dengan demikian @distube/ytsr tidak digunakan.
-             */
-            if (!isYoutubeUrl(query)) {
-                console.log(`Searching YouTube with yt-dlp: ${query}`);
-
-                videoUrl = await searchYoutube(query);
-
-                console.log(`YouTube result: ${videoUrl}`);
-            }
-
-            console.log(`Playing YouTube: ${videoUrl}`);
-
-            await distube.play(
-                voiceChannel,
-                videoUrl,
-                {
-                    member: message.member,
-                    textChannel: message.channel,
-                    message
-                }
-            );
-
-            await loadingMsg.delete().catch(() => {});
-        } catch (error) {
-            console.error(
-                'Error DisTube Play:',
-                error
-            );
-
-            await loadingMsg.delete().catch(() => {});
-
-            return message.reply(
-                `❌ Gagal memutar lagu: ${
-                    error.message ||
-                    'Terjadi kesalahan ketika mengambil audio YouTube.'
-                }`
-            );
-        }
-    },
-
-    handleSkipYoutube: async (message, queue) => {
-        try {
-            await queue.skip();
-
-            return message.reply(
-                '⏭️ Lagu berhasil dilewati!'
-            );
-        } catch (error) {
-            return message.reply(
-                '❌ Tidak ada lagu berikutnya di dalam antrean.'
-            );
-        }
-    },
-
-    handlePauseYoutube: (message, queue) => {
-        if (!queue) {
-            return message.reply(
-                '❌ Tidak ada musik yang sedang diputar.'
-            );
-        }
-
-        if (queue.paused) {
-            return message.reply(
-                '⏸️ Musik sudah dalam keadaan dijeda.'
-            );
-        }
-
-        queue.pause();
-
-        return message.reply(
-            '⏸️ Musik berhasil dijeda!'
-        );
-    },
-
-    handleResumeYoutube: (message, queue) => {
-        if (!queue) {
-            return message.reply(
-                '❌ Tidak ada musik yang sedang diputar.'
-            );
-        }
-
-        if (!queue.paused) {
-            return message.reply(
-                '▶️ Musik sedang berjalan.'
-            );
-        }
-
-        queue.resume();
-
-        return message.reply(
-            '▶️ Musik dilanjutkan!'
-        );
-    },
-
-    handleStopYoutube: (message, queue) => {
-        if (!queue) {
-            return message.reply(
-                '❌ Bot tidak sedang memutar musik di voice channel.'
-            );
-        }
-
-        queue.stop();
-
-        return message.reply(
-            '⏹️ Musik dihentikan dan antrean dibersihkan!'
-        );
-    },
-
-    handleQueueYoutube: (message, queue) => {
-        if (
-            !queue ||
-            !queue.songs ||
-            queue.songs.length === 0
-        ) {
-            return message.reply(
-                '❌ Tidak ada lagu dalam antrean saat ini.'
-            );
-        }
-
-        const q = queue.songs
-            .slice(0, 10)
-            .map((song, i) => {
-                if (i === 0) {
-                    return (
-                        `▶️ **Sedang Diputar:** ` +
-                        `${song.name} - \`${song.formattedDuration}\``
-                    );
-                }
-
-                return (
-                    `**${i}.** ${song.name} - ` +
-                    `\`${song.formattedDuration}\``
-                );
-            })
-            .join('\n');
-
-        const embed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle('🎶 Antrean Musik YouTube')
-            .setDescription(q)
-            .setFooter({
-                text:
-                    `Total lagu dalam antrean: ` +
-                    `${queue.songs.length}`
-            })
-            .setTimestamp();
-
-        return message.channel.send({
-            embeds: [embed]
-        });
-    },
-
-    handleNowPlaying: (message, queue) => {
-        if (
-            !queue ||
-            !queue.songs ||
-            !queue.songs[0]
-        ) {
-            return message.reply(
-                '❌ Tidak ada lagu yang sedang diputar.'
-            );
-        }
-
-        const song = queue.songs[0];
-
-        const embed = new EmbedBuilder()
-            .setColor(0xff0000)
-            .setTitle('🎵 Sedang Diputar (YouTube)')
-            .setDescription(
-                `[${song.name}](${song.url})`
-            )
-            .addFields(
-                {
-                    name: 'Durasi',
-                    value:
-                        `\`${queue.formattedCurrentTime} / ` +
-                        `${song.formattedDuration}\``,
-                    inline: true
-                },
-                {
-                    name: 'Diminta Oleh',
-                    value: `${song.user}`,
-                    inline: true
-                }
-            )
-            .setTimestamp();
-
-        if (song.thumbnail) {
-            embed.setThumbnail(song.thumbnail);
-        }
-
-        return message.channel.send({
-            embeds: [embed]
-        });
-    }
+    play,
+    skip,
+    pause,
+    resume,
+    stop,
+    queue,
+    nowPlaying,
+    searchYoutube,
+    getAudioStream
 };

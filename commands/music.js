@@ -1,78 +1,50 @@
-async function handleMusicCommands(
-    message,
-    command,
-    args,
-    distube,
-    musicModule
-) {
-    if (command === 'play' || command === 'p') {
-        const voiceChannel =
-            message.member.voice.channel;
+const {
+    joinVoiceChannel,
+    createAudioPlayer,
+    createAudioResource,
+    AudioPlayerStatus,
+    NoSubscriberBehavior
+} = require('@discordjs/voice');
 
-        if (!voiceChannel) {
-            return message.reply(
-                '❌ Kamu harus berada di voice channel!'
-            );
-        }
+const {
+    EmbedBuilder
+} = require('discord.js');
 
-        return musicModule.handlePlayYoutube(
-            message,
-            args,
-            distube
-        );
-    }
+async function handleMusicCommands(message, command, args, musicModule) {
+    switch (command) {
+        case 'play':
+        case 'p':
+            await musicModule.play(message, args);
+            break;
 
-    const queue = distube.getQueue(message);
+        case 'skip':
+        case 's':
+            await musicModule.skip(message);
+            break;
 
-    if (
-        !queue &&
-        !['stop', 'dc', 'leave'].includes(command)
-    ) {
-        return message.reply(
-            '❌ Tidak ada musik yang sedang diputar.'
-        );
-    }
+        case 'pause':
+            await musicModule.pause(message);
+            break;
 
-    if (['skip', 's'].includes(command)) {
-        return musicModule.handleSkipYoutube(
-            message,
-            queue
-        );
-    }
+        case 'resume':
+            await musicModule.resume(message);
+            break;
 
-    if (command === 'pause') {
-        return musicModule.handlePauseYoutube(
-            message,
-            queue
-        );
-    }
+        case 'stop':
+        case 'dc':
+        case 'leave':
+            await musicModule.stop(message);
+            break;
 
-    if (command === 'resume') {
-        return musicModule.handleResumeYoutube(
-            message,
-            queue
-        );
-    }
+        case 'queue':
+        case 'q':
+            await musicModule.queue(message);
+            break;
 
-    if (['stop', 'dc', 'leave'].includes(command)) {
-        return musicModule.handleStopYoutube(
-            message,
-            queue
-        );
-    }
-
-    if (['queue', 'q'].includes(command)) {
-        return musicModule.handleQueueYoutube(
-            message,
-            queue
-        );
-    }
-
-    if (['np', 'nowplaying'].includes(command)) {
-        return musicModule.handleNowPlaying(
-            message,
-            queue
-        );
+        case 'np':
+        case 'nowplaying':
+            await musicModule.nowPlaying(message);
+            break;
     }
 }
 
