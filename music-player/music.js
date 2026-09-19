@@ -2,7 +2,7 @@ const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
 
-const ytdlp = require('yt-dlp-exec');
+const ytdlp = require('youtube-dl-exec');
 const ffmpegPath = require('ffmpeg-static');
 
 const {
@@ -235,7 +235,6 @@ async function searchYoutube(query) {
             noWarnings: true,
             skipDownload: true,
             flatPlaylist: true,
-            noCallHome: true
         }
     );
 
@@ -280,7 +279,6 @@ async function getYoutubeInfo(url) {
         dumpSingleJson: true,
         noWarnings: true,
         skipDownload: true,
-        noCallHome: true
     });
 
     if (!result?.id) {
