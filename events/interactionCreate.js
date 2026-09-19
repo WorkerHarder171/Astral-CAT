@@ -1,98 +1,302 @@
-const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, MessageFlags, PermissionFlagsBits } = require('discord.js');
-const { createRolePanel } = require('../commands/claim-role');
+const {
+    MessageFlags
+} = require('discord.js');
 
 module.exports = async (client, interaction) => {
-    const ROLE_MEN_ID = process.env.ROLE_MEN_ID || '';
-    const ROLE_WOMEN_ID = process.env.ROLE_WOMEN_ID || '';
+    const ROLE_MEN_ID =
+        process.env.ROLE_MEN_ID?.trim() || '';
+
+    const ROLE_WOMEN_ID =
+        process.env.ROLE_WOMEN_ID?.trim() || '';
+
+    /*
+    |--------------------------------------------------------------------------
+    | GENDER BUTTON
+    |--------------------------------------------------------------------------
+    */
 
     if (interaction.isButton()) {
-        const { customId, member, guild } = interaction;
+        const { customId } = interaction;
 
-        if (customId === 'report_role') {
-            const modal = new ModalBuilder()
-                .setCustomId('modal_report_role')
-                .setTitle('Laporan Salah Input Role');
+        if (
+            !customId.startsWith('claim_gender_man:') &&
+            !customId.startsWith('claim_gender_woman:')
+        ) {
+            /*
+            |--------------------------------------------------------------------------
+            | REPORT ROLE
+            |--------------------------------------------------------------------------
+            */
 
-            const reasonInput = new TextInputBuilder()
-                .setCustomId('report_reason')
-                .setLabel('Jelaskan masalah / role yang benar:')
-                .setStyle(TextInputStyle.Paragraph)
-                .setMinLength(5)
-                .setMaxLength(500)
-                .setRequired(true);
+            if (customId === 'report_role') {
+                return;
+            }
 
-            modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
-            return await interaction.showModal(modal);
+            return;
         }
 
-        if (customId !== 'role_men' && customId !== 'role_women') return;
+        await interaction.deferReply({
+            flags: MessageFlags.Ephemeral
+        });
 
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        /*
+        |--------------------------------------------------------------------------
+        | GET GUILD ID
+        |--------------------------------------------------------------------------
+        */
 
-        const isMen = customId === 'role_men';
-        const targetRoleId = isMen ? ROLE_MEN_ID : ROLE_WOMEN_ID;
-        const oppositeRoleId = isMen ? ROLE_WOMEN_ID : ROLE_MEN_ID;
-        const roleName = isMen ? 'Men' : 'Women';
+        const [action, guildId] = customId.split(':');
 
-        const targetRole = guild.roles.cache.get(targetRoleId);
-        if (!targetRole) {
-            return interaction.editReply({ content: `⚠️ Role **${roleName}** tidak ditemukan!` });
+        if (!guildId) {
+            return interaction.editReply({
+                content: '❌ Guild ID tidak ditemukan.'
+            });
         }
+
+        /*
+        |--------------------------------------------------------------------------
+        | GET GUILD
+        |--------------------------------------------------------------------------
+        */
+
+        const guild = client.guilds.cache.get(guildId);
+
+        if (!guild) {
+            return interaction.editReply({
+                content:
+                    '❌ Server tidak ditemukan atau bot sudah tidak berada di server.'
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | GET MEMBER
+        |--------------------------------------------------------------------------
+        */
+
+        let member;
 
         try {
-            if (member.roles.cache.has(targetRoleId)) {
-                return interaction.editReply({ content: `⚠️ Anda sudah memiliki role **${targetRole.name}**!` });
-            }
+            member = await guild.members.fetch(
+                interaction.user.id
+            );
+        } catch (error) {
+            console.error(
+                '❌ Gagal mendapatkan member:',
+                error
+            );
 
-            if (member.roles.cache.has(oppositeRoleId)) {
-                return interaction.editReply({ content: `⚠️ Anda sudah memiliki role gender lain. Gunakan fitur laporan jika terjadi kesalahan.` });
-            }
+            return interaction.editReply({
+                content:
+                    '❌ Kamu tidak ditemukan sebagai member server.'
+            });
+        }
 
-            await member.roles.add(targetRole);
-            const updatedPanel = await createRolePanel(guild);
-            await interaction.message.edit(updatedPanel).catch(() => {});
+        /*
+        |--------------------------------------------------------------------------
+        | DETERMINE ROLE
+        |--------------------------------------------------------------------------
+        */
 
-            return interaction.editReply({ content: `✅ Berhasil mendapatkan role **${targetRole.name}**!` });
-        } catch (err) {
-            console.error('Error interaction role:', err);
-            return interaction.editReply({ content: `❌ Gagal memperbarui role: ${err.message}` });
+        const isMan =
+            action === 'claim_gender_man';
+
+        const targetRoleId = isMan
+            ? ROLE_MEN_ID
+            : ROLE_WOMEN_ID;
+
+        const oppositeRoleId = isMan
+            ? ROLE_WOMEN_ID
+            : ROLE_MEN_ID;
+
+        const genderName = isMan
+            ? 'Man'
+            : 'Woman';
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK ENV
+        |--------------------------------------------------------------------------
+        */
+
+        if (!targetRoleId) {
+            return interaction.editReply({
+                content:
+                    `❌ Role **${genderName}** belum dikonfigurasi di \`.env\`.`
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | GET TARGET ROLE
+        |--------------------------------------------------------------------------
+        */
+
+        const targetRole =
+            guild.roles.cache.get(targetRoleId);
+
+        if (!targetRole) {
+            return interaction.editReply({
+                content:
+                    `❌ Role **${genderName}** tidak ditemukan di server.`
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK TARGET ROLE
+        |--------------------------------------------------------------------------
+        */
+
+        if (member.roles.cache.has(targetRoleId)) {
+            return interaction.editReply({
+                content:
+                    `⚠️ Kamu sudah memiliki role **${targetRole.name}**.`
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK OPPOSITE ROLE
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            oppositeRoleId &&
+            member.roles.cache.has(oppositeRoleId)
+        ) {
+            return interaction.editReply({
+                content: [
+                    '⚠️ Kamu sudah memiliki role gender.',
+                    '',
+                    'Kamu tidak dapat memilih role gender lainnya.',
+                    '',
+                    'Jika terjadi kesalahan, silakan hubungi admin.'
+                ].join('\n')
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK BOT MEMBER
+        |--------------------------------------------------------------------------
+        */
+
+        const botMember = guild.members.me;
+
+        if (!botMember) {
+            return interaction.editReply({
+                content:
+                    '❌ Bot member tidak ditemukan.'
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CHECK MANAGE ROLES
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            !botMember.permissions.has('ManageRoles')
+        ) {
+            return interaction.editReply({
+                content:
+                    '❌ Bot tidak memiliki permission **Manage Roles**.'
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ROLE HIERARCHY
+        |--------------------------------------------------------------------------
+        */
+
+        if (
+            targetRole.position >=
+            botMember.roles.highest.position
+        ) {
+            return interaction.editReply({
+                content: [
+                    `❌ Bot tidak dapat memberikan role **${targetRole.name}**.`,
+                    '',
+                    'Pastikan role bot berada di atas role tersebut.'
+                ].join('\n')
+            });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | ADD ROLE
+        |--------------------------------------------------------------------------
+        */
+
+        try {
+            await member.roles.add(
+                targetRole,
+                `Claim gender: ${genderName}`
+            );
+
+            /*
+            |--------------------------------------------------------------------------
+            | DISABLE BUTTONS
+            |--------------------------------------------------------------------------
+            */
+
+            const disabledComponents =
+                interaction.message.components.map(row => ({
+                    type: row.type,
+                    components: row.components.map(component => ({
+                        type: component.type,
+                        style: component.style,
+                        label: component.label,
+                        emoji: component.emoji,
+                        custom_id: component.customId,
+                        disabled: true
+                    }))
+                }));
+
+            await interaction.message.edit({
+                components: disabledComponents
+            }).catch(() => {});
+
+            /*
+            |--------------------------------------------------------------------------
+            | SUCCESS
+            |--------------------------------------------------------------------------
+            */
+
+            return interaction.editReply({
+                content:
+                    `✅ Berhasil mendapatkan role **${targetRole.name}**!`
+            });
+
+        } catch (error) {
+            console.error(
+                '❌ Error claim gender:',
+                error
+            );
+
+            return interaction.editReply({
+                content: [
+                    '❌ Gagal memberikan role.',
+                    '',
+                    'Pastikan:',
+                    '• Bot memiliki permission **Manage Roles**',
+                    '• Role bot berada di atas role target',
+                    '• Role target masih tersedia'
+                ].join('\n')
+            });
         }
     }
 
-    if (interaction.isModalSubmit() && interaction.customId === 'modal_report_role') {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    /*
+    |--------------------------------------------------------------------------
+    | MODAL INTERACTION
+    |--------------------------------------------------------------------------
+    */
 
-        const reason = interaction.fields.getTextInputValue('report_reason');
-        const guild = interaction.guild;
-        const member = interaction.member;
-
-        let adminUser = null;
-        if (process.env.ADMIN_USER_ID) {
-            adminUser = await client.users.fetch(process.env.ADMIN_USER_ID.trim()).catch(() => null);
-        }
-        if (!adminUser && guild) {
-            const owner = await guild.fetchOwner().catch(() => null);
-            if (owner) adminUser = owner.user;
-        }
-
-        if (!adminUser) {
-            return interaction.editReply({ content: '❌ Tidak dapat menemukan Admin/Owner server.' });
-        }
-
-        const reportEmbed = new EmbedBuilder()
-            .setColor(0xED4245)
-            .setTitle('🚨 Laporan Salah Input Role Gender')
-            .addFields(
-                { name: '👤 Member', value: `${member.user.tag} (<@${member.id}>)` },
-                { name: '📝 Pesan', value: `\`\`\`${reason}\`\`\`` }
-            )
-            .setTimestamp();
-
-        try {
-            await adminUser.send({ embeds: [reportEmbed] });
-            return interaction.editReply({ content: `✅ Laporan telah dikirim ke Admin (**${adminUser.tag}**)!` });
-        } catch (err) {
-            return interaction.editReply({ content: `⚠️ Gagal mengirim DM ke Admin. Pastikan DM Admin terbuka.` });
-        }
+    if (interaction.isModalSubmit()) {
+        return;
     }
 };

@@ -1,14 +1,3 @@
-const {
-    joinVoiceChannel,
-    createAudioPlayer,
-    createAudioResource,
-    AudioPlayerStatus,
-    NoSubscriberBehavior
-} = require('@discordjs/voice');
-
-const {
-    EmbedBuilder
-} = require('discord.js');
 
 async function handleMusicCommands(message, command, args, musicModule) {
     switch (command) {

@@ -1,5 +1,10 @@
 const { spawn } = require('child_process');
 const ytdlp = require('yt-dlp-exec');
+
+const {
+    EmbedBuilder
+} = require('discord.js');
+
 const {
     joinVoiceChannel,
     getVoiceConnection,
@@ -10,10 +15,104 @@ const {
     StreamType
 } = require('@discordjs/voice');
 
+const currentSongs = new Map();
 const players = new Map();
-const processes = new Map();
+const processesMap = new Map();
+const queues = new Map();
 
 const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
+
+function formatDuration(seconds) {
+    if (!seconds || !Number.isFinite(Number(seconds))) {
+        return 'Tidak diketahui';
+    }
+
+    seconds = Math.floor(Number(seconds));
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (hours > 0) {
+        return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+}
+
+function createMusicEmbed({
+    song = null,
+    color,
+    status = null,
+    position = null,
+    requester = null,
+    error = null,
+    title = null
+}) {
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle('🎵 YouTube Music');
+
+    if (song?.title && song?.url) {
+        embed.setDescription(
+            `[**${song.title}**](${song.url})`
+        );
+    } else if (title) {
+        embed.setDescription(`**${title}**`);
+    }
+
+    if (song?.thumbnail) {
+        embed.setThumbnail(song.thumbnail);
+    }
+
+    if (song?.duration !== undefined) {
+        embed.addFields({
+            name: '⏱️ Durasi',
+            value: formatDuration(song.duration),
+            inline: true
+        });
+    }
+
+    if (position !== null) {
+        embed.addFields({
+            name: '📊 Posisi Antrean',
+            value: `#${position}`,
+            inline: true
+        });
+    }
+
+    if (requester) {
+        embed.addFields({
+            name: '👤 Diminta oleh',
+            value: requester,
+            inline: true
+        });
+    }
+
+    if (status) {
+        embed.addFields({
+            name: 'Status',
+            value: status,
+            inline: false
+        });
+    }
+
+    if (error) {
+        embed.addFields({
+            name: '❌ Keterangan',
+            value: error,
+            inline: false
+        });
+    }
+
+    embed.setFooter({
+        text: 'Astral CAT Music Player'
+    });
+
+    embed.setTimestamp();
+
+    return embed;
+}
 
 function isYoutubeUrl(query) {
     try {
@@ -24,14 +123,18 @@ function isYoutubeUrl(query) {
             'www.youtube.com',
             'm.youtube.com',
             'youtu.be'
-        ].includes(url.hostname.toLowerCase());
+        ].includes(
+            url.hostname.toLowerCase()
+        );
     } catch {
         return false;
     }
 }
 
 async function searchYoutube(query) {
-    console.log(`Searching YouTube with yt-dlp: ${query}`);
+    console.log(
+        `Searching YouTube with yt-dlp: ${query}`
+    );
 
     const result = await ytdlp(
         `ytsearch1:${query}`,
@@ -45,55 +148,114 @@ async function searchYoutube(query) {
     );
 
     if (!result) {
-        throw new Error('YouTube search returned no result');
+        throw new Error(
+            'YouTube search returned no result'
+        );
     }
 
-    const video = result.entries?.[0] || result;
+    const video =
+        result.entries?.[0] ||
+        result;
 
     if (!video?.id) {
-        throw new Error('YouTube video ID not found');
+        throw new Error(
+            'YouTube video ID not found'
+        );
     }
 
-    const url = `https://www.youtube.com/watch?v=${video.id}`;
+    const url =
+        `https://www.youtube.com/watch?v=${video.id}`;
 
-    console.log(`YouTube result: ${url}`);
+    console.log(
+        `YouTube result: ${url}`
+    );
 
     return {
         id: video.id,
         title: video.title || 'Unknown title',
-        url
+        url,
+        duration: Number(video.duration) || 0,
+        thumbnail:
+            video.thumbnail ||
+            `https://i.ytimg.com/vi/${video.id}/hq720.jpg`
+    };
+}
+
+async function getYoutubeInfo(url) {
+    console.log(
+        `Getting YouTube information: ${url}`
+    );
+
+    const result = await ytdlp(
+        url,
+        {
+            dumpSingleJson: true,
+            noWarnings: true,
+            skipDownload: true,
+            noCallHome: true
+        }
+    );
+
+    if (!result?.id) {
+        throw new Error(
+            'YouTube video information not found'
+        );
+    }
+
+    return {
+        id: result.id,
+        title: result.title || url,
+        url,
+        duration: Number(result.duration) || 0,
+        thumbnail:
+            result.thumbnail ||
+            `https://i.ytimg.com/vi/${result.id}/hq720.jpg`
     };
 }
 
 function cleanupProcesses(guildId) {
-    const processes = processesMap.get(guildId);
+    const processes =
+        processesMap.get(guildId);
 
     if (!processes) {
         return;
     }
 
-    const { ytdlpProcess, ffmpeg } = processes;
+    const {
+        ytdlpProcess,
+        ffmpeg
+    } = processes;
 
     try {
-        if (ytdlpProcess && !ytdlpProcess.killed) {
+        if (
+            ytdlpProcess &&
+            !ytdlpProcess.killed
+        ) {
             ytdlpProcess.kill();
         }
     } catch (error) {
-        console.error('Failed to kill yt-dlp:', error);
+        console.error(
+            'Failed to kill yt-dlp:',
+            error
+        );
     }
 
     try {
-        if (ffmpeg && !ffmpeg.killed) {
+        if (
+            ffmpeg &&
+            !ffmpeg.killed
+        ) {
             ffmpeg.kill();
         }
     } catch (error) {
-        console.error('Failed to kill FFmpeg:', error);
+        console.error(
+            'Failed to kill FFmpeg:',
+            error
+        );
     }
 
     processesMap.delete(guildId);
 }
-
-const processesMap = new Map();
 
 function createFFmpegProcess() {
     const args = [
@@ -116,354 +278,1191 @@ function createFFmpegProcess() {
         'pipe:1'
     ];
 
-    console.log(`Starting FFmpeg: ${FFMPEG_PATH}`);
+    console.log(
+        `Starting FFmpeg: ${FFMPEG_PATH}`
+    );
 
-    const ffmpeg = spawn(FFMPEG_PATH, args, {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true
-    });
-
-    return ffmpeg;
+    return spawn(
+        FFMPEG_PATH,
+        args,
+        {
+            stdio: [
+                'pipe',
+                'pipe',
+                'pipe'
+            ],
+            windowsHide: true
+        }
+    );
 }
 
-async function getAudioStream(url, guildId = null) {
-    console.log(`Getting audio stream with yt-dlp: ${url}`);
+async function getAudioStream(
+    url,
+    guildId = null
+) {
+    console.log(
+        `Getting audio stream with yt-dlp: ${url}`
+    );
 
-    const ytdlpProcess = ytdlp.exec(
-        url,
-        {
-            format: 'bestaudio/best',
-            output: '-',
-            quiet: true,
-            noWarnings: true,
-            noCheckCertificates: true,
-            noCallHome: true
-        },
-        {
-            stdio: ['ignore', 'pipe', 'pipe']
+    const ytdlpProcess =
+        ytdlp.exec(
+            url,
+            {
+                format: 'bestaudio/best',
+                output: '-',
+                quiet: true,
+                noWarnings: true,
+                noCheckCertificates: true,
+                noCallHome: true
+            },
+            {
+                stdio: [
+                    'ignore',
+                    'pipe',
+                    'pipe'
+                ]
+            }
+        );
+
+    const ffmpeg =
+        createFFmpegProcess();
+
+    if (guildId) {
+        processesMap.set(
+            guildId,
+            {
+                ytdlpProcess,
+                ffmpeg
+            }
+        );
+    }
+
+    ytdlpProcess.stderr.on(
+        'data',
+        (data) => {
+            const message =
+                data.toString().trim();
+
+            if (message) {
+                console.error(
+                    `[yt-dlp] ${message}`
+                );
+            }
         }
     );
 
-    const ffmpeg = createFFmpegProcess();
+    ffmpeg.stderr.on(
+        'data',
+        (data) => {
+            const message =
+                data.toString().trim();
 
-    if (guildId) {
-        processesMap.set(guildId, {
-            ytdlpProcess,
-            ffmpeg
-        });
-    }
-
-    ytdlpProcess.stderr.on('data', (data) => {
-        const message = data.toString().trim();
-
-        if (message) {
-            console.error(`[yt-dlp] ${message}`);
+            if (message) {
+                console.error(
+                    `[FFmpeg] ${message}`
+                );
+            }
         }
-    });
+    );
 
-    ffmpeg.stderr.on('data', (data) => {
-        const message = data.toString().trim();
-
-        if (message) {
-            console.error(`[FFmpeg] ${message}`);
-        }
-    });
-
-    ytdlpProcess.on('error', (error) => {
-        console.error('yt-dlp process error:', error);
-    });
-
-    ffmpeg.on('error', (error) => {
-        console.error('FFmpeg process error:', error);
-
-        if (error.code === 'ENOENT') {
+    ytdlpProcess.on(
+        'error',
+        (error) => {
             console.error(
-                `FFmpeg tidak ditemukan: ${FFMPEG_PATH}`
+                'yt-dlp process error:',
+                error
             );
         }
-    });
+    );
 
-    ytdlpProcess.stdout.on('error', (error) => {
-        console.error('yt-dlp stdout error:', error);
-    });
+    ffmpeg.on(
+        'error',
+        (error) => {
+            console.error(
+                'FFmpeg process error:',
+                error
+            );
 
-    ffmpeg.stdin.on('error', (error) => {
-        if (error.code !== 'EPIPE') {
-            console.error('FFmpeg stdin error:', error);
-        }
-    });
-
-    ffmpeg.stdout.on('error', (error) => {
-        console.error('FFmpeg stdout error:', error);
-    });
-
-    ytdlpProcess.stdout.pipe(ffmpeg.stdin);
-
-    ytdlpProcess.on('close', (code) => {
-        console.log(`yt-dlp exited with code ${code}`);
-
-        try {
-            if (!ffmpeg.stdin.destroyed) {
-                ffmpeg.stdin.end();
-            }
-        } catch (error) {
-            console.error('Failed to close FFmpeg stdin:', error);
-        }
-    });
-
-    ffmpeg.on('close', (code, signal) => {
-        console.log(
-            `FFmpeg exited with code ${code}` +
-            `${signal ? `, signal ${signal}` : ''}`
-        );
-
-        if (guildId) {
-            const current = processesMap.get(guildId);
-
-            if (
-                current &&
-                current.ytdlpProcess === ytdlpProcess &&
-                current.ffmpeg === ffmpeg
-            ) {
-                processesMap.delete(guildId);
+            if (error.code === 'ENOENT') {
+                console.error(
+                    `FFmpeg tidak ditemukan: ${FFMPEG_PATH}`
+                );
             }
         }
-    });
+    );
+
+    ytdlpProcess.stdout.on(
+        'error',
+        (error) => {
+            console.error(
+                'yt-dlp stdout error:',
+                error
+            );
+        }
+    );
+
+    ffmpeg.stdin.on(
+        'error',
+        (error) => {
+            if (error.code !== 'EPIPE') {
+                console.error(
+                    'FFmpeg stdin error:',
+                    error
+                );
+            }
+        }
+    );
+
+    ffmpeg.stdout.on(
+        'error',
+        (error) => {
+            console.error(
+                'FFmpeg stdout error:',
+                error
+            );
+        }
+    );
+
+    ytdlpProcess.stdout.pipe(
+        ffmpeg.stdin
+    );
+
+    ytdlpProcess.on(
+        'close',
+        (code) => {
+            console.log(
+                `yt-dlp exited with code ${code}`
+            );
+
+            try {
+                if (
+                    !ffmpeg.stdin.destroyed
+                ) {
+                    ffmpeg.stdin.end();
+                }
+            } catch (error) {
+                console.error(
+                    'Failed to close FFmpeg stdin:',
+                    error
+                );
+            }
+        }
+    );
+
+    ffmpeg.on(
+        'close',
+        (code, signal) => {
+            console.log(
+                `FFmpeg exited with code ${code}` +
+                `${signal ? `, signal ${signal}` : ''}`
+            );
+
+            if (guildId) {
+                const current =
+                    processesMap.get(
+                        guildId
+                    );
+
+                if (
+                    current &&
+                    current.ytdlpProcess ===
+                        ytdlpProcess &&
+                    current.ffmpeg === ffmpeg
+                ) {
+                    processesMap.delete(
+                        guildId
+                    );
+                }
+            }
+        }
+    );
 
     return ffmpeg;
 }
 
-async function play(message, args) {
-    if (!message.member?.voice?.channel) {
-        return message.reply(
-            'Kamu harus masuk voice channel terlebih dahulu.'
+function getQueue(guildId) {
+    if (!queues.has(guildId)) {
+        queues.set(
+            guildId,
+            []
         );
     }
 
-    if (!args.length) {
-        return message.reply(
-            'Masukkan judul lagu atau URL YouTube.'
+    return queues.get(guildId);
+}
+
+function getPlayer(guildId) {
+    return players.get(guildId);
+}
+
+function getCurrentSong(guildId) {
+    return currentSongs.get(guildId);
+}
+
+function isPlayerActive(guildId) {
+    const player =
+        players.get(guildId);
+
+    if (!player) {
+        return false;
+    }
+
+    return (
+        player.state.status ===
+            AudioPlayerStatus.Playing ||
+        player.state.status ===
+            AudioPlayerStatus.Paused ||
+        processesMap.has(guildId)
+    );
+}
+
+async function playSong(
+    guildId,
+    song,
+    message
+) {
+    const player =
+        getPlayer(guildId);
+
+    if (!player) {
+        throw new Error(
+            'Audio player tidak ditemukan'
         );
     }
 
-    const voiceChannel = message.member.voice.channel;
-    const guildId = message.guild.id;
+    const connection =
+        getVoiceConnection(
+            guildId
+        );
 
-    let song;
+    if (!connection) {
+        throw new Error(
+            'Bot tidak terhubung ke voice channel'
+        );
+    }
 
-    try {
-        const query = args.join(' ').trim();
+    cleanupProcesses(
+        guildId
+    );
 
-        if (isYoutubeUrl(query)) {
-            song = {
-                url: query,
-                title: query
-            };
-        } else {
-            song = await searchYoutube(query);
-        }
+    console.log(
+        `Playing YouTube: ${song.url}`
+    );
 
-        console.log(`Playing YouTube: ${song.url}`);
-
-        let connection = getVoiceConnection(guildId);
-
-        if (!connection) {
-            connection = joinVoiceChannel({
-                channelId: voiceChannel.id,
-                guildId,
-                adapterCreator: message.guild.voiceAdapterCreator,
-                selfDeaf: true,
-                selfMute: false
-            });
-        }
-
-        let player = players.get(guildId);
-
-        if (!player) {
-            player = createAudioPlayer({
-                behaviors: {
-                    noSubscriber: NoSubscriberBehavior.Play
-                }
-            });
-
-            players.set(guildId, player);
-
-            player.on('error', (error) => {
-                console.error(
-                    `Audio player error [${guildId}]:`,
-                    error
-                );
-
-                cleanupProcesses(guildId);
-            });
-        }
-
-        connection.subscribe(player);
-
-        cleanupProcesses(guildId);
-
-        const ffmpeg = await getAudioStream(
+    const ffmpeg =
+        await getAudioStream(
             song.url,
             guildId
         );
 
-        const resource = createAudioResource(
+    const resource =
+        createAudioResource(
             ffmpeg.stdout,
             {
-                inputType: StreamType.Raw,
+                inputType:
+                    StreamType.Raw,
                 inlineVolume: false
             }
         );
 
-        player.play(resource);
+    currentSongs.set(
+        guildId,
+        song
+    );
 
-        const idleHandler = () => {
-            cleanupProcesses(guildId);
-            player.removeListener(
-                AudioPlayerStatus.Idle,
-                idleHandler
+    player.play(
+        resource
+    );
+
+    return song;
+}
+
+async function playNext(
+    guildId,
+    message
+) {
+    const queue =
+        getQueue(guildId);
+
+    if (!queue.length) {
+        currentSongs.delete(
+            guildId
+        );
+
+        return null;
+    }
+
+    const nextSong =
+        queue.shift();
+
+    try {
+        await playSong(
+            guildId,
+            nextSong,
+            message
+        );
+
+        console.log(
+            `Playing next queued song: ${nextSong.title}`
+        );
+
+        return nextSong;
+    } catch (error) {
+        console.error(
+            'Failed to play queued song:',
+            error
+        );
+
+        if (queue.length) {
+            return playNext(
+                guildId,
+                message
             );
-        };
+        }
 
-        player.once(
-            AudioPlayerStatus.Idle,
-            idleHandler
+        currentSongs.delete(
+            guildId
         );
 
-        return message.reply(
-            `▶️ Memutar **${song.title || song.url}**`
+        return null;
+    }
+}
+
+function setupPlayer(
+    guildId,
+    player
+) {
+    player.on(
+        'error',
+        async (error) => {
+            console.error(
+                `Audio player error [${guildId}]:`,
+                error
+            );
+
+            cleanupProcesses(
+                guildId
+            );
+        }
+    );
+
+    player.on(
+        'stateChange',
+        async (
+            oldState,
+            newState
+        ) => {
+            if (
+                oldState.status !==
+                    AudioPlayerStatus.Playing &&
+                newState.status !==
+                    AudioPlayerStatus.Idle
+            ) {
+                return;
+            }
+
+            if (
+                newState.status !==
+                AudioPlayerStatus.Idle
+            ) {
+                return;
+            }
+
+            const processes =
+                processesMap.has(
+                    guildId
+                );
+
+            if (processes) {
+                cleanupProcesses(
+                    guildId
+                );
+            }
+
+            const queue =
+                getQueue(guildId);
+
+            if (!queue.length) {
+                currentSongs.delete(
+                    guildId
+                );
+
+                return;
+            }
+
+            const connection =
+                getVoiceConnection(
+                    guildId
+                );
+
+            if (!connection) {
+                return;
+            }
+
+            const nextSong =
+                queue.shift();
+
+            try {
+                await playSong(
+                    guildId,
+                    nextSong,
+                    null
+                );
+
+                console.log(
+                    `Auto-playing: ${nextSong.title}`
+                );
+            } catch (error) {
+                console.error(
+                    'Failed to auto-play next song:',
+                    error
+                );
+
+                if (queue.length) {
+                    try {
+                        await playNext(
+                            guildId,
+                            null
+                        );
+                    } catch (
+                        nextError
+                    ) {
+                        console.error(
+                            'Failed to recover queue:',
+                            nextError
+                        );
+                    }
+                }
+            }
+        }
+    );
+}
+
+async function play(
+    message,
+    args
+) {
+    if (
+        !message.member?.voice?.channel
+    ) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak dapat memutar musik',
+                    error:
+                        'Kamu harus masuk voice channel terlebih dahulu.'
+                })
+            ]
+        });
+    }
+
+    if (!args.length) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Query kosong',
+                    error:
+                        'Masukkan judul lagu atau URL YouTube.'
+                })
+            ]
+        });
+    }
+
+    const voiceChannel =
+        message.member.voice.channel;
+
+    const guildId =
+        message.guild.id;
+
+    try {
+        const query =
+            args.join(' ').trim();
+
+        let song;
+
+        if (isYoutubeUrl(query)) {
+            song =
+                await getYoutubeInfo(
+                    query
+                );
+        } else {
+            song =
+                await searchYoutube(
+                    query
+                );
+        }
+
+        song.requester =
+            message.author.username;
+
+        let connection =
+            getVoiceConnection(
+                guildId
+            );
+
+        if (!connection) {
+            connection =
+                joinVoiceChannel({
+                    channelId:
+                        voiceChannel.id,
+                    guildId,
+                    adapterCreator:
+                        message.guild
+                            .voiceAdapterCreator,
+                    selfDeaf: true,
+                    selfMute: false
+                });
+        }
+
+        let player =
+            players.get(
+                guildId
+            );
+
+        if (!player) {
+            player =
+                createAudioPlayer({
+                    behaviors: {
+                        noSubscriber:
+                            NoSubscriberBehavior.Play
+                    }
+                });
+
+            players.set(
+                guildId,
+                player
+            );
+
+            setupPlayer(
+                guildId,
+                player
+            );
+        }
+
+        connection.subscribe(
+            player
         );
+
+        const queue =
+            getQueue(guildId);
+
+        const isActive =
+            isPlayerActive(
+                guildId
+            );
+
+        if (isActive) {
+            queue.push(
+                song
+            );
+
+            const position =
+                queue.length + 1;
+
+            const embed =
+                createMusicEmbed({
+                    song,
+                    color: 0x5865F2,
+                    status:
+                        '📋 Ditambahkan ke antrean',
+                    position,
+                    requester:
+                        message.author
+                            .username
+                });
+
+            embed.addFields({
+                name:
+                    '📊 Total Antrean',
+                value:
+                    `${queue.length + 1}`,
+                inline: true
+            });
+
+            return message.reply({
+                embeds: [
+                    embed
+                ]
+            });
+        }
+
+        await playSong(
+            guildId,
+            song,
+            message
+        );
+
+        const embed =
+            createMusicEmbed({
+                song,
+                color: 0x57F287,
+                status:
+                    '▶️ Sedang diputar',
+                position: 1,
+                requester:
+                    message.author
+                        .username
+            });
+
+        return message.reply({
+            embeds: [
+                embed
+            ]
+        });
     } catch (error) {
         console.error(
             'YouTube stream error:',
             error
         );
 
-        cleanupProcesses(guildId);
-
-        return message.reply(
-            `❌ Gagal memutar lagu.\n\`${error.message}\``
+        cleanupProcesses(
+            guildId
         );
+
+        const embed =
+            createMusicEmbed({
+                color: 0xED4245,
+                status:
+                    '❌ Gagal memutar lagu',
+                requester:
+                    message.author
+                        .username,
+                error:
+                    `\`${error.message}\``
+            });
+
+        return message.reply({
+            embeds: [
+                embed
+            ]
+        });
     }
 }
 
-async function skip(message) {
-    const guildId = message.guild.id;
-    const player = players.get(guildId);
+async function skip(
+    message
+) {
+    const guildId =
+        message.guild.id;
+
+    const player =
+        players.get(
+            guildId
+        );
+
+    const queue =
+        getQueue(guildId);
 
     if (!player) {
-        return message.reply(
-            'Tidak ada lagu yang sedang diputar.'
-        );
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak ada musik',
+                    error:
+                        'Tidak ada lagu yang sedang diputar.'
+                })
+            ]
+        });
     }
 
-    cleanupProcesses(guildId);
-
-    player.stop(true);
-
-    return message.reply(
-        '⏭️ Lagu dilewati.'
+    cleanupProcesses(
+        guildId
     );
-}
 
-async function pause(message) {
-    const player = players.get(message.guild.id);
-
-    if (!player) {
-        return message.reply(
-            'Tidak ada lagu yang sedang diputar.'
+    if (!queue.length) {
+        currentSongs.delete(
+            guildId
         );
+
+        player.stop(
+            true
+        );
+
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0x57F287,
+                    status:
+                        '⏭️ Lagu dilewati',
+                    error:
+                        'Tidak ada lagu berikutnya di antrean.'
+                })
+            ]
+        });
     }
 
-    if (player.state.status === AudioPlayerStatus.Paused) {
-        return message.reply(
-            '⏸️ Musik sudah dijeda.'
+    const nextSong =
+        queue.shift();
+
+    player.stop(
+        true
+    );
+
+    try {
+        await playSong(
+            guildId,
+            nextSong,
+            message
         );
+
+        const embed =
+            createMusicEmbed({
+                song: nextSong,
+                color: 0x57F287,
+                status:
+                    '⏭️ Lagu dilewati',
+                position: 1,
+                requester:
+                    nextSong.requester ||
+                    message.author
+                        .username
+            });
+
+        return message.reply({
+            embeds: [
+                embed
+            ]
+        });
+    } catch (error) {
+        console.error(
+            'Failed to play next queued song:',
+            error
+        );
+
+        const embed =
+            createMusicEmbed({
+                color: 0xED4245,
+                status:
+                    '❌ Gagal memutar lagu berikutnya',
+                error:
+                    error.message
+            });
+
+        return message.reply({
+            embeds: [
+                embed
+            ]
+        });
+    }
+}
+
+async function pause(
+    message
+) {
+    const guildId =
+        message.guild.id;
+
+    const player =
+        players.get(
+            guildId
+        );
+
+    const song =
+        getCurrentSong(
+            guildId
+        );
+
+    if (!player) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak ada musik',
+                    error:
+                        'Tidak ada lagu yang sedang diputar.'
+                })
+            ]
+        });
+    }
+
+    if (
+        player.state.status ===
+        AudioPlayerStatus.Paused
+    ) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    song,
+                    color: 0xFEE75C,
+                    status:
+                        '⏸️ Musik sudah dijeda',
+                    position: 1,
+                    requester:
+                        song?.requester ||
+                        message.author
+                            .username
+                })
+            ]
+        });
+    }
+
+    if (
+        player.state.status !==
+        AudioPlayerStatus.Playing
+    ) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak ada musik',
+                    error:
+                        'Tidak ada musik yang sedang diputar.'
+                })
+            ]
+        });
     }
 
     player.pause();
 
-    return message.reply(
-        '⏸️ Musik dijeda.'
-    );
+    return message.reply({
+        embeds: [
+            createMusicEmbed({
+                song,
+                color: 0xFEE75C,
+                status:
+                    '⏸️ Musik dijeda',
+                position: 1,
+                requester:
+                    song?.requester ||
+                    message.author
+                        .username
+            })
+        ]
+    });
 }
 
-async function resume(message) {
-    const player = players.get(message.guild.id);
+async function resume(
+    message
+) {
+    const guildId =
+        message.guild.id;
+
+    const player =
+        players.get(
+            guildId
+        );
+
+    const song =
+        getCurrentSong(
+            guildId
+        );
 
     if (!player) {
-        return message.reply(
-            'Tidak ada lagu yang sedang diputar.'
-        );
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak ada musik',
+                    error:
+                        'Tidak ada lagu yang sedang diputar.'
+                })
+            ]
+        });
     }
 
-    if (player.state.status !== AudioPlayerStatus.Paused) {
-        return message.reply(
-            '▶️ Musik tidak sedang dijeda.'
-        );
+    if (
+        player.state.status !==
+        AudioPlayerStatus.Paused
+    ) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '❌ Tidak sedang dijeda',
+                    error:
+                        'Musik tidak sedang dalam kondisi pause.'
+                })
+            ]
+        });
     }
 
     player.unpause();
 
-    return message.reply(
-        '▶️ Musik dilanjutkan.'
-    );
+    return message.reply({
+        embeds: [
+            createMusicEmbed({
+                song,
+                color: 0x57F287,
+                status:
+                    '▶️ Musik dilanjutkan',
+                position: 1,
+                requester:
+                    song?.requester ||
+                    message.author
+                        .username
+            })
+        ]
+    });
 }
 
-async function stop(message) {
-    const guildId = message.guild.id;
-    const player = players.get(guildId);
+async function stop(
+    message
+) {
+    const guildId =
+        message.guild.id;
 
-    cleanupProcesses(guildId);
+    const player =
+        players.get(
+            guildId
+        );
+
+    cleanupProcesses(
+        guildId
+    );
+
+    const queue =
+        getQueue(guildId);
+
+    const queueCount =
+        queue.length;
+
+    queue.length = 0;
+
+    currentSongs.delete(
+        guildId
+    );
 
     if (player) {
-        player.stop(true);
-        players.delete(guildId);
+        player.stop(
+            true
+        );
+
+        players.delete(
+            guildId
+        );
     }
 
-    const connection = getVoiceConnection(guildId);
+    queues.delete(
+        guildId
+    );
+
+    const connection =
+        getVoiceConnection(
+            guildId
+        );
 
     if (connection) {
         connection.destroy();
     }
 
-    return message.reply(
-        '⏹️ Musik dihentikan dan bot keluar dari voice channel.'
-    );
+    const embed =
+        createMusicEmbed({
+            color: 0xED4245,
+            status:
+                '⏹️ Musik dihentikan',
+            error:
+                queueCount > 0
+                    ? `Musik dihentikan dan **${queueCount} lagu** di antrean telah dihapus.`
+                    : 'Musik dihentikan dan bot keluar dari voice channel.'
+        });
+
+    return message.reply({
+        embeds: [
+            embed
+        ]
+    });
 }
 
-async function queue(message) {
-    return message.reply(
-        'Queue belum diaktifkan.'
-    );
+async function queue(
+    message
+) {
+    const guildId =
+        message.guild.id;
+
+    const player =
+        players.get(
+            guildId
+        );
+
+    const currentSong =
+        getCurrentSong(
+            guildId
+        );
+
+    const songQueue =
+        getQueue(guildId);
+
+    if (
+        !currentSong &&
+        !songQueue.length
+    ) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        '📋 Queue kosong',
+                    error:
+                        'Tidak ada lagu yang sedang diputar maupun menunggu di antrean.'
+                })
+            ]
+        });
+    }
+
+    const embed =
+        new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(
+                '🎵 YouTube Music'
+            )
+            .setFooter({
+                text:
+                    'Astral CAT Music Player'
+            })
+            .setTimestamp();
+
+    if (currentSong) {
+        embed.addFields({
+            name:
+                '▶️ Sedang Diputar',
+            value:
+                `[**${currentSong.title}**](${currentSong.url})\n` +
+                `⏱️ ${formatDuration(currentSong.duration)}\n` +
+                `👤 ${currentSong.requester || 'Unknown'}`,
+            inline: false
+        });
+
+        if (currentSong.thumbnail) {
+            embed.setThumbnail(
+                currentSong.thumbnail
+            );
+        }
+    }
+
+    if (songQueue.length) {
+        const queueText =
+            songQueue
+                .map(
+                    (song, index) =>
+                        `**${index + 2}.** [${song.title}](${song.url})\n` +
+                        `⏱️ ${formatDuration(song.duration)} • 👤 ${song.requester || 'Unknown'}`
+                )
+                .join('\n\n');
+
+        embed.addFields({
+            name:
+                '📋 Queue Berikutnya',
+            value:
+                queueText,
+            inline: false
+        });
+    } else {
+        embed.addFields({
+            name:
+                '📋 Queue Berikutnya',
+            value:
+                'Tidak ada lagu berikutnya.',
+            inline: false
+        });
+    }
+
+    embed.addFields({
+        name:
+            '📊 Total Antrean',
+        value:
+            `**${currentSong ? songQueue.length + 1 : songQueue.length}**`,
+        inline: true
+    });
+
+    return message.reply({
+        embeds: [
+            embed
+        ]
+    });
 }
 
-async function nowPlaying(message) {
-    const player = players.get(message.guild.id);
+async function nowPlaying(
+    message
+) {
+    const guildId =
+        message.guild.id;
 
-    if (!player) {
-        return message.reply(
-            'ℹ️ Tidak ada lagu yang sedang diputar.'
+    const player =
+        players.get(
+            guildId
         );
+
+    const song =
+        getCurrentSong(
+            guildId
+        );
+
+    if (!player || !song) {
+        return message.reply({
+            embeds: [
+                createMusicEmbed({
+                    color: 0xED4245,
+                    status:
+                        'ℹ️ Tidak ada musik',
+                    error:
+                        'Tidak ada lagu yang sedang diputar.'
+                })
+            ]
+        });
     }
 
-    const status = player.state.status;
+    const status =
+        player.state.status;
 
-    if (status === AudioPlayerStatus.Playing) {
-        return message.reply(
-            '🎵 Musik sedang diputar.'
-        );
+    let color;
+    let statusText;
+
+    if (
+        status ===
+        AudioPlayerStatus.Playing
+    ) {
+        color = 0x57F287;
+        statusText =
+            '▶️ Sedang diputar';
+    } else if (
+        status ===
+        AudioPlayerStatus.Paused
+    ) {
+        color = 0xFEE75C;
+        statusText =
+            '⏸️ Musik dijeda';
+    } else {
+        color = 0xED4245;
+        statusText =
+            'ℹ️ Tidak aktif';
     }
 
-    if (status === AudioPlayerStatus.Paused) {
-        return message.reply(
-            '⏸️ Musik sedang dijeda.'
-        );
-    }
+    const songQueue =
+        getQueue(guildId);
 
-    return message.reply(
-        'ℹ️ Tidak ada lagu yang sedang diputar.'
-    );
+    const embed =
+        createMusicEmbed({
+            song,
+            color,
+            status: statusText,
+            position: 1,
+            requester:
+                song.requester
+        });
+
+    embed.addFields({
+        name:
+            '📋 Queue',
+        value:
+            `${songQueue.length} lagu menunggu`,
+        inline: true
+    });
+
+    return message.reply({
+        embeds: [
+            embed
+        ]
+    });
 }
 
 module.exports = {
