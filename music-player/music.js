@@ -1,5 +1,9 @@
 const { spawn } = require('child_process');
+const http = require('http');
+const https = require('https');
+
 const ytdlp = require('yt-dlp-exec');
+const ffmpegPath = require('ffmpeg-static');
 
 const {
     EmbedBuilder
@@ -19,8 +23,6 @@ const currentSongs = new Map();
 const players = new Map();
 const processesMap = new Map();
 const queues = new Map();
-
-const FFMPEG_PATH = process.env.FFMPEG_PATH || 'ffmpeg';
 
 function formatDuration(seconds) {
     if (!seconds || !Number.isFinite(Number(seconds))) {
@@ -131,6 +133,96 @@ function isYoutubeUrl(query) {
     }
 }
 
+function createHttpStream(url) {
+    return new Promise((resolve, reject) => {
+        const client = url.startsWith('https://') ? https : http;
+
+        const request = client.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        }, response => {
+            if (
+                response.statusCode >= 300 &&
+                response.statusCode < 400 &&
+                response.headers.location
+            ) {
+                response.resume();
+
+                createHttpStream(response.headers.location)
+                    .then(resolve)
+                    .catch(reject);
+
+                return;
+            }
+
+            if (response.statusCode !== 200) {
+                response.resume();
+
+                reject(
+                    new Error(
+                        `HTTP stream failed with status ${response.statusCode}`
+                    )
+                );
+
+                return;
+            }
+
+            resolve(response);
+        });
+
+        request.on('error', reject);
+    });
+}
+
+async function createFFmpegStream(inputStream) {
+    if (!ffmpegPath) {
+        throw new Error('FFmpeg binary tidak ditemukan.');
+    }
+
+    const ffmpeg = spawn(ffmpegPath, [
+        '-hide_banner',
+        '-loglevel',
+        'error',
+
+        '-i',
+        'pipe:0',
+
+        '-f',
+        's16le',
+        '-ar',
+        '48000',
+        '-ac',
+        '2',
+
+        'pipe:1'
+    ], {
+        stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    inputStream.pipe(ffmpeg.stdin);
+
+    inputStream.on('error', error => {
+        ffmpeg.stdin.destroy(error);
+    });
+
+    ffmpeg.stdin.on('error', () => {});
+
+    ffmpeg.stderr.on('data', data => {
+        const message = data.toString().trim();
+
+        if (message) {
+            console.error('[FFmpeg]', message);
+        }
+    });
+
+    ffmpeg.on('error', error => {
+        console.error('[FFmpeg Process Error]', error);
+    });
+
+    return ffmpeg;
+}
+
 async function searchYoutube(query) {
     console.log(
         `Searching YouTube with yt-dlp: ${query}`
@@ -182,24 +274,17 @@ async function searchYoutube(query) {
 }
 
 async function getYoutubeInfo(url) {
-    console.log(
-        `Getting YouTube information: ${url}`
-    );
+    console.log(`Getting YouTube information: ${url}`);
 
-    const result = await ytdlp(
-        url,
-        {
-            dumpSingleJson: true,
-            noWarnings: true,
-            skipDownload: true,
-            noCallHome: true
-        }
-    );
+    const result = await ytdlp(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        skipDownload: true,
+        noCallHome: true
+    });
 
     if (!result?.id) {
-        throw new Error(
-            'YouTube video information not found'
-        );
+        throw new Error('YouTube video information not found');
     }
 
     return {
@@ -209,7 +294,8 @@ async function getYoutubeInfo(url) {
         duration: Number(result.duration) || 0,
         thumbnail:
             result.thumbnail ||
-            `https://i.ytimg.com/vi/${result.id}/hq720.jpg`
+            `https://i.ytimg.com/vi/${result.id}/hq720.jpg`,
+        formats: result.formats || []
     };
 }
 
@@ -222,30 +308,15 @@ function cleanupProcesses(guildId) {
     }
 
     const {
-        ytdlpProcess,
         ffmpeg
     } = processes;
-
-    try {
-        if (
-            ytdlpProcess &&
-            !ytdlpProcess.killed
-        ) {
-            ytdlpProcess.kill();
-        }
-    } catch (error) {
-        console.error(
-            'Failed to kill yt-dlp:',
-            error
-        );
-    }
 
     try {
         if (
             ffmpeg &&
             !ffmpeg.killed
         ) {
-            ffmpeg.kill();
+            ffmpeg.kill('SIGKILL');
         }
     } catch (error) {
         console.error(
@@ -257,227 +328,65 @@ function cleanupProcesses(guildId) {
     processesMap.delete(guildId);
 }
 
-function createFFmpegProcess() {
-    const args = [
-        '-hide_banner',
-        '-loglevel',
-        'error',
+async function getAudioStream(url, guildId = null) {
+    console.log(`Getting audio stream with yt-dlp: ${url}`);
 
-        '-i',
-        'pipe:0',
+    const info = await ytdlp(url, {
+        dumpSingleJson: true,
+        noWarnings: true,
+        skipDownload: true,
+        noCallHome: true
+    });
 
-        '-f',
-        's16le',
-
-        '-ar',
-        '48000',
-
-        '-ac',
-        '2',
-
-        'pipe:1'
-    ];
-
-    console.log(
-        `Starting FFmpeg: ${FFMPEG_PATH}`
-    );
-
-    return spawn(
-        FFMPEG_PATH,
-        args,
-        {
-            stdio: [
-                'pipe',
-                'pipe',
-                'pipe'
-            ],
-            windowsHide: true
-        }
-    );
-}
-
-async function getAudioStream(
-    url,
-    guildId = null
-) {
-    console.log(
-        `Getting audio stream with yt-dlp: ${url}`
-    );
-
-    const ytdlpProcess =
-        ytdlp.exec(
-            url,
-            {
-                format: 'bestaudio/best',
-                output: '-',
-                quiet: true,
-                noWarnings: true,
-                noCheckCertificates: true,
-                noCallHome: true
-            },
-            {
-                stdio: [
-                    'ignore',
-                    'pipe',
-                    'pipe'
-                ]
-            }
-        );
-
-    const ffmpeg =
-        createFFmpegProcess();
-
-    if (guildId) {
-        processesMap.set(
-            guildId,
-            {
-                ytdlpProcess,
-                ffmpeg
-            }
-        );
+    if (!info?.formats?.length) {
+        throw new Error('Tidak ditemukan format audio YouTube');
     }
 
-    ytdlpProcess.stderr.on(
-        'data',
-        (data) => {
-            const message =
-                data.toString().trim();
+    const audioFormats = info.formats
+        .filter(format =>
+            format.url &&
+            format.vcodec === 'none' &&
+            format.acodec &&
+            format.acodec !== 'none'
+        );
 
-            if (message) {
-                console.error(
-                    `[yt-dlp] ${message}`
-                );
-            }
-        }
+    if (!audioFormats.length) {
+        throw new Error('Tidak ditemukan audio stream yang kompatibel');
+    }
+
+    const opusFormat = audioFormats
+        .filter(format =>
+            format.acodec.toLowerCase().includes('opus') &&
+            format.ext === 'webm'
+        )
+        .sort((a, b) =>
+            (b.abr || 0) - (a.abr || 0)
+        )[0];
+
+    if (opusFormat) {
+        console.log('Using direct WebM/Opus stream');
+
+        return {
+            type: 'opus',
+            url: opusFormat.url,
+            format: opusFormat
+        };
+    }
+
+    const fallbackFormat = audioFormats
+        .sort((a, b) =>
+            (b.abr || 0) - (a.abr || 0)
+        )[0];
+
+    console.log(
+        `Using FFmpeg fallback: ${fallbackFormat.ext}/${fallbackFormat.acodec}`
     );
 
-    ffmpeg.stderr.on(
-        'data',
-        (data) => {
-            const message =
-                data.toString().trim();
-
-            if (message) {
-                console.error(
-                    `[FFmpeg] ${message}`
-                );
-            }
-        }
-    );
-
-    ytdlpProcess.on(
-        'error',
-        (error) => {
-            console.error(
-                'yt-dlp process error:',
-                error
-            );
-        }
-    );
-
-    ffmpeg.on(
-        'error',
-        (error) => {
-            console.error(
-                'FFmpeg process error:',
-                error
-            );
-
-            if (error.code === 'ENOENT') {
-                console.error(
-                    `FFmpeg tidak ditemukan: ${FFMPEG_PATH}`
-                );
-            }
-        }
-    );
-
-    ytdlpProcess.stdout.on(
-        'error',
-        (error) => {
-            console.error(
-                'yt-dlp stdout error:',
-                error
-            );
-        }
-    );
-
-    ffmpeg.stdin.on(
-        'error',
-        (error) => {
-            if (error.code !== 'EPIPE') {
-                console.error(
-                    'FFmpeg stdin error:',
-                    error
-                );
-            }
-        }
-    );
-
-    ffmpeg.stdout.on(
-        'error',
-        (error) => {
-            console.error(
-                'FFmpeg stdout error:',
-                error
-            );
-        }
-    );
-
-    ytdlpProcess.stdout.pipe(
-        ffmpeg.stdin
-    );
-
-    ytdlpProcess.on(
-        'close',
-        (code) => {
-            console.log(
-                `yt-dlp exited with code ${code}`
-            );
-
-            try {
-                if (
-                    !ffmpeg.stdin.destroyed
-                ) {
-                    ffmpeg.stdin.end();
-                }
-            } catch (error) {
-                console.error(
-                    'Failed to close FFmpeg stdin:',
-                    error
-                );
-            }
-        }
-    );
-
-    ffmpeg.on(
-        'close',
-        (code, signal) => {
-            console.log(
-                `FFmpeg exited with code ${code}` +
-                `${signal ? `, signal ${signal}` : ''}`
-            );
-
-            if (guildId) {
-                const current =
-                    processesMap.get(
-                        guildId
-                    );
-
-                if (
-                    current &&
-                    current.ytdlpProcess ===
-                        ytdlpProcess &&
-                    current.ffmpeg === ffmpeg
-                ) {
-                    processesMap.delete(
-                        guildId
-                    );
-                }
-            }
-        }
-    );
-
-    return ffmpeg;
+    return {
+        type: 'ffmpeg',
+        url: fallbackFormat.url,
+        format: fallbackFormat
+    };
 }
 
 function getQueue(guildId) {
@@ -516,24 +425,15 @@ function isPlayerActive(guildId) {
     );
 }
 
-async function playSong(
-    guildId,
-    song,
-    message
-) {
-    const player =
-        getPlayer(guildId);
+
+async function playSong(guildId, song, message) {
+    const player = getPlayer(guildId);
 
     if (!player) {
-        throw new Error(
-            'Audio player tidak ditemukan'
-        );
+        throw new Error('Audio player tidak ditemukan');
     }
 
-    const connection =
-        getVoiceConnection(
-            guildId
-        );
+    const connection = getVoiceConnection(guildId);
 
     if (!connection) {
         throw new Error(
@@ -541,38 +441,30 @@ async function playSong(
         );
     }
 
-    cleanupProcesses(
-        guildId
-    );
+    cleanupProcesses(guildId);
 
-    console.log(
-        `Playing YouTube: ${song.url}`
-    );
+    console.log(`Playing YouTube: ${song.url}`);
 
-    const ffmpeg =
-        await getAudioStream(
-            song.url,
-            guildId
-        );
+    const audio = await getAudioStream(song.url);
 
-    const resource =
-        createAudioResource(
-            ffmpeg.stdout,
-            {
-                inputType:
-                    StreamType.Raw,
-                inlineVolume: false
-            }
-        );
+    let resource;
 
-    currentSongs.set(
-        guildId,
-        song
-    );
+    if (audio.type === 'opus') {
+        const stream = await createHttpStream(audio.url);
 
-    player.play(
-        resource
-    );
+        resource = createAudioResource(stream, {
+            inputType: StreamType.WebmOpus
+        });
+    } else {
+        const stream = await createHttpStream(audio.url);
+        const ffmpeg = await createFFmpegStream(stream);
+
+        resource = createAudioResource(ffmpeg.stdout, {
+            inputType: StreamType.Raw
+        });
+    }
+
+    player.play(resource);
 
     return song;
 }
