@@ -1,3 +1,4 @@
+require('dotenv').config();
 const {
     Client,
     GatewayIntentBits,
@@ -12,15 +13,21 @@ const {
     TextInputBuilder,
     TextInputStyle
 } = require('discord.js');
-require('dotenv').config();
 
-const music = require('./music.js');
+const { DisTube } = require('distube');
+const { SpotifyPlugin } = require('@distube/spotify');
+const { YtDlpPlugin } = require('@distube/yt-dlp');
+const { YouTubePlugin } = require('@distube/youtube'); // <-- Tambahkan Import Ini
 
-const welcome = require('./welcome.js');
+const ffmpeg = require('ffmpeg-static');
 
-// ID Channel Welcome (bisa diatur via .env atau perintah !setup-welcome)
+// 1. IMPORT MODUL LOCAL (music.js & welcome.js)
+const music = require('./music');
+const welcome = require('./welcome');
+
 let welcomeChannelId = process.env.WELCOME_CHANNEL_ID || '';
 
+// 2. Inisialisasi Discord Client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -31,25 +38,24 @@ const client = new Client({
     ]
 });
 
-const play = require('play-dl');
-require('dotenv').config();
-
-client.once('ready', async () => {
-    console.log(`Bot logged in as ${client.user.tag}`);
-
-    try {
-        // Memuat file token otorisasi yang baru saja dibuat
-        await play.setToken({
-            user_data: true
-        });
-        console.log('✅ Spotify Token terpasang & siap digunakan!');
-    } catch (err) {
-        console.error('❌ Gagal memuat Spotify token:', err);
-    }
+const distube = new DisTube(client, {
+    emitNewSongOnly: true,
+    ffmpeg: {
+        path: ffmpeg
+    },
+    plugins: [
+        new YouTubePlugin(),
+        new SpotifyPlugin({
+            api: {
+                clientId: process.env.SPOTIFY_CLIENT_ID,
+                clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
+            },
+        }),
+        new YtDlpPlugin() 
+    ],
 });
 
 // === KONFIGURASI ROLE ID ===
-// ID dapat disetting langsung di file .env atau ganti nilai default di bawah ini
 const ROLE_MEN_ID = process.env.ROLE_MEN_ID || 'MASUKKAN_ID_ROLE_MEN_DISINI';
 const ROLE_WOMEN_ID = process.env.ROLE_WOMEN_ID || 'MASUKKAN_ID_ROLE_WOMEN_DISINI';
 const PREFIX = '!';
@@ -58,7 +64,6 @@ const PREFIX = '!';
  * Menghasilkan panel Embed dan Button dengan live counting member Men & Women
  */
 async function createRolePanel(guild) {
-    // Sinkronkan cache member server agar hitungan akurat
     await guild.members.fetch().catch(() => {});
 
     const menRole = guild.roles.cache.get(ROLE_MEN_ID);
@@ -125,7 +130,6 @@ client.on('messageCreate', async (message) => {
     // 1. COMMAND: !setup-role [#channel]
     // ----------------------------------------------------
     if (command === 'setup-role' || command === 'setup-gender') {
-        // Cek apakah pengirim memiliki izin Administrator atau Manage Roles
         if (
             !message.member.permissions.has(PermissionFlagsBits.ManageRoles) &&
             !message.member.permissions.has(PermissionFlagsBits.Administrator)
@@ -133,7 +137,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Anda membutuhkan izin **Manage Roles** atau **Administrator** untuk menjalankan perintah ini!');
         }
 
-        // Tentukan channel target: jika mention channel ada maka gunakan itu, jika tidak gunakan channel saat ini
         const targetChannel = message.mentions.channels.first() || message.channel;
 
         if (!targetChannel.isTextBased()) {
@@ -188,7 +191,6 @@ client.on('messageCreate', async (message) => {
             return message.reply('❌ Channel target harus berupa channel teks!');
         }
 
-        // Ambil pesan setelah mention channel
         const contentAfterMention = args.slice(1).join(' ').trim();
         if (!contentAfterMention) {
             return message.reply('❌ Isi pesan pengumuman tidak boleh kosong!');
@@ -197,7 +199,6 @@ client.on('messageCreate', async (message) => {
         let title = '📢 PENGUMUMAN RESMI';
         let description = contentAfterMention;
 
-        // Mendukung pemisah judul dengan pipa '|'
         if (contentAfterMention.includes('|')) {
             const parts = contentAfterMention.split('|');
             title = '📢 ' + parts[0].trim();
@@ -205,7 +206,7 @@ client.on('messageCreate', async (message) => {
         }
 
         const announceEmbed = new EmbedBuilder()
-            .setColor(0xFEE75C) // Warna Gold pengumuman
+            .setColor(0xFEE75C)
             .setTitle(title)
             .setDescription(description)
             .setAuthor({
@@ -236,27 +237,28 @@ client.on('messageCreate', async (message) => {
     // ----------------------------------------------------
     // 3. COMMAND: MUSIC PLAYER
     // ----------------------------------------------------
-if (command === 'play' || command === 'p') {
-    await music.handlePlaySpotify(message, args);
-}
-else if (command === 'skip' || command === 's') {
-    music.handleSkipSpotify(message);
-}
-else if (command === 'pause') {
-    music.handlePauseSpotify(message);
-}
-else if (command === 'resume') {
-    music.handleResumeSpotify(message);
-}
-else if (command === 'stop' || command === 'dc' || command === 'leave') {
-    music.handleStopSpotify(message);
-}
-else if (command === 'queue' || command === 'q') {
-    music.handleQueueSpotify(message);
-}
-else if (command === 'np' || command === 'nowplaying') {
-    music.handleNowPlaying(message);
-}
+else if (command === 'play' || command === 'p') {
+        const voiceChannel = message.member.voice.channel;
+        if (!voiceChannel) return message.reply("❌ Kamu harus berada di voice channel untuk memutar musik!");
+        await music.handlePlaySpotify(message, args, distube);
+    }
+    else if (['skip', 's', 'pause', 'resume', 'stop', 'dc', 'leave', 'queue', 'q'].includes(command)) {
+        const queue = distube.getQueue(message);
+        if (!queue && command !== 'stop' && command !== 'dc' && command !== 'leave') {
+            return message.reply('❌ Tidak ada musik yang sedang diputar saat ini.');
+        }
+
+        if (command === 'skip' || command === 's') music.handleSkipSpotify(message, queue);
+        else if (command === 'pause') music.handlePauseSpotify(message, queue);
+        else if (command === 'resume') music.handleResumeSpotify(message, queue);
+        else if (command === 'stop' || command === 'dc' || command === 'leave') music.handleStopSpotify(message, queue);
+        else if (command === 'queue' || command === 'q') music.handleQueueSpotify(message, queue);
+    }
+    else if (command === 'np' || command === 'nowplaying') {
+        const queue = distube.getQueue(message);
+        if (!queue) return message.reply('❌ Tidak ada musik yang sedang diputar saat ini.');
+        music.handleNowPlaying(message, queue);
+    }
 
     // ----------------------------------------------------
     // 4. COMMAND: !help & !ping
@@ -305,25 +307,22 @@ else if (command === 'np' || command === 'nowplaying') {
         const latency = sent.createdTimestamp - message.createdTimestamp;
         const apiLatency = Math.round(client.ws.ping);
 
-        // Format waktu aktif bot (uptime)
         const totalSeconds = process.uptime();
         const days = Math.floor(totalSeconds / (3600 * 24));
         const hours = Math.floor((totalSeconds % (3600 * 24)) / 3600);
         const minutes = Math.floor((totalSeconds % 3600) / 60);
         const seconds = Math.floor(totalSeconds % 60);
-        const uptimeStr = `${days > 0 ? `${days}h ` : ''}${hours > 0 ? `${hours}j ` : ''}${minutes}m ${seconds}s`;
+        const uptimeStr = `${days > 0 ? `${days}h ` : ''}${hours > 0 ? `${hours}j ` : ''}${minutes}m${seconds}s`;
 
-        // Penggunaan memori RAM
         const memoryUsed = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(2);
 
-        // Status dan warna embed berdasarkan kecepatan ping
-        let embedColor = 0x57F287; // Hijau
+        let embedColor = 0x57F287;
         let statusKoneksi = '🟢 Sangat Bagus';
         if (apiLatency > 250 || latency > 300) {
-            embedColor = 0xED4245; // Merah
+            embedColor = 0xED4245;
             statusKoneksi = '🔴 Mengalami Kelambatan (High Ping)';
         } else if (apiLatency > 150 || latency > 200) {
-            embedColor = 0xFEE75C; // Kuning
+            embedColor = 0xFEE75C;
             statusKoneksi = '🟡 Cukup Baik / Normal';
         }
 
@@ -378,21 +377,17 @@ else if (command === 'np' || command === 'nowplaying') {
         }
 
         welcomeChannelId = targetChannel.id;
-        return message.reply(`✅ Channel sambutan berhasil diatur ke <#${targetChannel.id}>! Setiap member baru akan disambut dengan kartu grafis di channel tersebut.`);
+        return message.reply(`✅ Channel sambutan berhasil diatur ke <#${targetChannel.id}>! Every member baru akan disambut dengan kartu grafis di channel tersebut.`);
     }
-});
+}); // <-- Penutup blok client.on('messageCreate') yang benar
 
 // ==========================================
 // LISTENER: Interaction (Button & Modal)
 // ==========================================
 client.on('interactionCreate', async (interaction) => {
-    // ----------------------------------------------------
-    // 1. HANDLER KETIKA TOMBOL DIKLIK
-    // ----------------------------------------------------
     if (interaction.isButton()) {
         const { customId, member, guild } = interaction;
 
-        // Tombol Lapor Salah Role (Memunculkan Form Modal)
         if (customId === 'report_role') {
             const modal = new ModalBuilder()
                 .setCustomId('modal_report_role')
@@ -415,7 +410,6 @@ client.on('interactionCreate', async (interaction) => {
 
         if (customId !== 'role_men' && customId !== 'role_women') return;
 
-        // Acknowledge interaction secepatnya agar tidak timeout (Unknown interaction 10062)
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         let targetRoleId = '';
@@ -435,7 +429,6 @@ client.on('interactionCreate', async (interaction) => {
             oppositeRoleName = 'Men';
         }
 
-        // Validasi apakah admin sudah mengisi Role ID
         if (!targetRoleId || targetRoleId.startsWith('MASUKKAN_ID')) {
             return interaction.editReply({
                 content: `⚠️ ID Role **${roleName}** belum dikonfigurasi oleh Admin di file .env atau index.js!`
@@ -463,14 +456,12 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         try {
-            // 1. Jika member sudah memiliki role yang diklik
             if (member.roles.cache.has(targetRoleId)) {
                 return interaction.editReply({
                     content: `⚠️ Anda sudah memiliki role **${targetRole.name}**!`
                 });
             }
 
-            // 2. Jika member sudah memiliki role gender lawannya
             if (member.roles.cache.has(oppositeRoleId)) {
                 const oppositeRole = guild.roles.cache.get(oppositeRoleId);
                 const opName = oppositeRole ? oppositeRole.name : oppositeRoleName;
@@ -479,14 +470,11 @@ client.on('interactionCreate', async (interaction) => {
                 });
             }
 
-            // 3. Jika belum memiliki role -> Berikan role berhasil
             await member.roles.add(targetRole);
 
-            // Perbarui pesan panel embed dengan counting terbaru
             const updatedPanel = await createRolePanel(guild);
             await interaction.message.edit(updatedPanel).catch(() => {});
 
-            // Berikan keterangan bahwa pilihan role telah berhasil
             return interaction.editReply({
                 content: `✅ Pilihan role berhasil! Anda sekarang memiliki role **${targetRole.name}**.`
             });
@@ -498,9 +486,6 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // ----------------------------------------------------
-    // 2. HANDLER KETIKA MODAL LAPORAN DISUBMIT
-    // ----------------------------------------------------
     if (interaction.isModalSubmit() && interaction.customId === 'modal_report_role') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -508,7 +493,6 @@ client.on('interactionCreate', async (interaction) => {
         const guild = interaction.guild;
         const member = interaction.member;
 
-        // Cari admin penerima DM (dari ADMIN_USER_ID di .env atau otomatis Owner Server)
         let adminUser = null;
         if (process.env.ADMIN_USER_ID && process.env.ADMIN_USER_ID.trim() !== '') {
             adminUser = await client.users.fetch(process.env.ADMIN_USER_ID.trim()).catch(() => null);
@@ -525,7 +509,6 @@ client.on('interactionCreate', async (interaction) => {
             });
         }
 
-        // Cek role gender yang saat ini dimiliki user
         const hasMen = member.roles.cache.has(ROLE_MEN_ID);
         const hasWomen = member.roles.cache.has(ROLE_WOMEN_ID);
         let currentRoleStatus = 'Belum memilih role gender';
@@ -533,7 +516,7 @@ client.on('interactionCreate', async (interaction) => {
         else if (hasWomen) currentRoleStatus = 'Women ♀️';
 
         const reportEmbed = new EmbedBuilder()
-            .setColor(0xED4245) // Merah laporan
+            .setColor(0xED4245)
             .setTitle('🚨 Laporan Salah Input Role Gender')
             .setDescription(`Ada member yang melaporkan salah input role di server **${guild.name}**.`)
             .addFields(
@@ -569,19 +552,16 @@ client.on(Events.GuildMemberAdd, async (member) => {
     try {
         let channel = null;
 
-        // 1. Cek channel dari setting welcomeChannelId
         if (welcomeChannelId) {
             channel = member.guild.channels.cache.get(welcomeChannelId);
         }
 
-        // 2. Cari channel bernama welcome / selamat-datang jika belum disetting
         if (!channel) {
             channel = member.guild.channels.cache.find(
                 (ch) => ch.isTextBased() && (ch.name.includes('welcome') || ch.name.includes('selamat-datang'))
             );
         }
 
-        // 3. Fallback ke systemChannel bawaan server
         if (!channel) {
             channel = member.guild.systemChannel;
         }
