@@ -1,38 +1,58 @@
+const musicPlayer = require('../music-player');
 
-async function handleMusicCommands(message, command, args, musicModule) {
+async function handleMusicCommands(
+    message,
+    command,
+    args
+) {
     switch (command) {
         case 'play':
         case 'p':
-            await musicModule.play(message, args);
+            await musicPlayer.play(
+                message,
+                args
+            );
             break;
 
         case 'skip':
         case 's':
-            await musicModule.skip(message);
+            await musicPlayer.skip(
+                message
+            );
             break;
 
         case 'pause':
-            await musicModule.pause(message);
+            await musicPlayer.pause(
+                message
+            );
             break;
 
         case 'resume':
-            await musicModule.resume(message);
+            await musicPlayer.resume(
+                message
+            );
             break;
 
         case 'stop':
         case 'dc':
         case 'leave':
-            await musicModule.stop(message);
+            await musicPlayer.stop(
+                message
+            );
             break;
 
         case 'queue':
         case 'q':
-            await musicModule.queue(message);
+            await musicPlayer.queue(
+                message
+            );
             break;
 
         case 'np':
         case 'nowplaying':
-            await musicModule.nowPlaying(message);
+            await musicPlayer.nowPlaying(
+                message
+            );
             break;
     }
 }

@@ -1,66 +1,121 @@
-const { PermissionFlagsBits, EmbedBuilder } = require('discord.js');
+const {
+    PermissionFlagsBits,
+    EmbedBuilder,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
+} = require('discord.js');
 
-async function handleAnnounce(message, command, args) {
+const ANNOUNCE_BUTTON_ID = 'announcement_create';
+
+async function handleAnnounce(message, command) {
     if (
-        !message.member.permissions.has(PermissionFlagsBits.ManageMessages) &&
-        !message.member.permissions.has(PermissionFlagsBits.Administrator)
+        !message.member.permissions.has(
+            PermissionFlagsBits.ManageMessages
+        ) &&
+        !message.member.permissions.has(
+            PermissionFlagsBits.Administrator
+        )
     ) {
-        return message.reply('❌ Anda membutuhkan izin **Manage Messages** atau **Administrator**!');
+        return message.reply(
+            '❌ Anda membutuhkan izin **Manage Messages** atau **Administrator**!'
+        );
     }
 
-    const targetChannel = message.mentions.channels.first();
+    const announcementChannelId =
+        process.env.ANNOUNCEMENT_CHANNEL_ID?.trim();
+
+    if (!announcementChannelId) {
+        return message.reply(
+            '❌ `ANNOUNCEMENT_CHANNEL_ID` belum dikonfigurasi di `.env`.'
+        );
+    }
+
+    const targetChannel =
+        message.guild.channels.cache.get(
+            announcementChannelId
+        );
+
     if (!targetChannel) {
         return message.reply(
-            '❌ Format perintah salah!\n' +
-            '• `!announce #pengumuman Pesan`\n' +
-            '• `!announce #pengumuman Judul | Pesan`\n' +
-            '• `!announce-all #pengumuman Judul | Pesan`'
+            '❌ Channel pengumuman tidak ditemukan.\n' +
+            'Periksa kembali `ANNOUNCEMENT_CHANNEL_ID` di `.env`.'
         );
     }
 
     if (!targetChannel.isTextBased()) {
-        return message.reply('❌ Channel target harus berupa channel teks!');
+        return message.reply(
+            '❌ Channel pengumuman harus berupa channel teks!'
+        );
     }
 
-    const contentAfterMention = args.slice(1).join(' ').trim();
-    if (!contentAfterMention) {
-        return message.reply('❌ Isi pesan pengumuman tidak boleh kosong!');
-    }
+    const isAnnounceAll = command === 'announce-all';
 
-    let title = '📢 PENGUMUMAN RESMI';
-    let description = contentAfterMention;
-
-    if (contentAfterMention.includes('|')) {
-        const parts = contentAfterMention.split('|');
-        title = '📢 ' + parts[0].trim();
-        description = parts.slice(1).join('|').trim();
-    }
-
-    const announceEmbed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setColor(0xFEE75C)
-        .setTitle(title)
-        .setDescription(description)
-        .setAuthor({
-            name: message.author.tag,
-            iconURL: message.author.displayAvatarURL({ dynamic: true })
+        .setTitle('📢 BUAT PENGUMUMAN')
+        .setDescription(
+            '# Pilih Template\n\n' +
+            'Pilih template yang ingin digunakan.\n\n' +
+            'Setelah memilih template, kamu masih dapat mengubah seluruh isi pengumuman sebelum dikirim.'
+        )
+        .addFields({
+            name: '📌 Channel Tujuan',
+            value: `<#${targetChannel.id}>`
         })
-        .setThumbnail(message.guild.iconURL({ dynamic: true }))
-        .setFooter({ text: `Pengumuman Resmi • ${message.guild.name}` })
-        .setTimestamp();
+        .setFooter({
+            text: isAnnounceAll
+                ? 'Mode: @everyone'
+                : 'Mode: Pengumuman'
+        });
 
-    try {
-        const sendOptions = { embeds: [announceEmbed] };
-        if (command === 'announce-all') sendOptions.content = '@everyone';
+    const streamButton = new ButtonBuilder()
+        .setCustomId(
+            `${ANNOUNCE_BUTTON_ID}:stream:${isAnnounceAll ? 'all' : 'normal'}`
+        )
+        .setLabel('Stream')
+        .setEmoji('🎥')
+        .setStyle(ButtonStyle.Primary);
 
-        await targetChannel.send(sendOptions);
-        await message.delete().catch(() => {});
+    const maintenanceButton = new ButtonBuilder()
+        .setCustomId(
+            `${ANNOUNCE_BUTTON_ID}:maintenance:${isAnnounceAll ? 'all' : 'normal'}`
+        )
+        .setLabel('Maintenance')
+        .setEmoji('🔧')
+        .setStyle(ButtonStyle.Danger);
 
-        const confirmMsg = await message.channel.send(`✅ Pengumuman berhasil dikirim ke <#${targetChannel.id}>!`);
-        setTimeout(() => confirmMsg.delete().catch(() => {}), 5000);
-    } catch (err) {
-        console.error('Error pengumuman:', err);
-        return message.reply(`❌ Gagal mengirim pengumuman: ${err.message}`);
-    }
+    const generalButton = new ButtonBuilder()
+        .setCustomId(
+            `${ANNOUNCE_BUTTON_ID}:general:${isAnnounceAll ? 'all' : 'normal'}`
+        )
+        .setLabel('General')
+        .setEmoji('📢')
+        .setStyle(ButtonStyle.Secondary);
+
+    const eventButton = new ButtonBuilder()
+        .setCustomId(
+            `${ANNOUNCE_BUTTON_ID}:event:${isAnnounceAll ? 'all' : 'normal'}`
+        )
+        .setLabel('Event')
+        .setEmoji('🎉')
+        .setStyle(ButtonStyle.Success);
+
+    const row = new ActionRowBuilder()
+        .addComponents(
+            streamButton,
+            maintenanceButton,
+            generalButton,
+            eventButton
+        );
+
+    return message.reply({
+        embeds: [embed],
+        components: [row]
+    });
 }
 
-module.exports = { handleAnnounce };
+module.exports = {
+    handleAnnounce,
+    ANNOUNCE_BUTTON_ID
+};
