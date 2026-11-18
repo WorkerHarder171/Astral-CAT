@@ -56,6 +56,10 @@ const commandsData = [
         .setDescription('Lihat informasi lagu yang sedang diputar'),
 
     new SlashCommandBuilder()
+        .setName('claim-role')
+        .setDescription('Kirim pesan interaktif pemilihan role ke DM kamu'),
+
+    new SlashCommandBuilder()
         .setName('setup-role')
         .setDescription('Kirim panel pilihan role gender interaktif (Men & Women)')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
@@ -291,6 +295,24 @@ async function handleSlashCommand(client, interaction) {
                 const adapter = createInteractionMessageAdapter(interaction);
                 await musicModule.nowPlaying(adapter);
                 return interaction.reply({ content: '🎵 Informasi lagu dikirimkan ke channel.', ephemeral: true });
+            }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | CLAIM ROLE (DIRECT DM)
+        |--------------------------------------------------------------------------
+        */
+        if (commandName === 'claim-role') {
+            await interaction.deferReply({ ephemeral: true });
+            const { sendRoleDm } = require('../events/guildMemberAdd');
+            const result = await sendRoleDm(interaction.member);
+            if (result.success) {
+                return interaction.editReply('📩 Pesan pemilihan role berhasil dikirimkan ke DM kamu!');
+            } else if (result.reason === 'DM_CLOSED') {
+                return interaction.editReply('❌ Bot tidak dapat mengirim DM karena pesan langsung (DM) kamu ditutup di server ini.');
+            } else {
+                return interaction.editReply(`❌ Gagal mengirim DM: ${result.reason}`);
             }
         }
 

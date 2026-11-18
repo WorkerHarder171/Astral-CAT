@@ -143,6 +143,26 @@ client.on(
                 return;
             }
 
+            if (
+                [
+                    'claim-role',
+                    'dm-role',
+                    'pilih-role',
+                    'test-dm'
+                ].includes(command)
+            ) {
+                const { sendRoleDm } = require('./events/guildMemberAdd');
+                const result = await sendRoleDm(message.member);
+                if (result.success) {
+                    await message.reply('📩 Pesan pemilihan role berhasil dikirimkan ke DM kamu! Silakan periksa chat pribadi.');
+                } else if (result.reason === 'DM_CLOSED') {
+                    await message.reply('❌ Bot tidak dapat mengirim DM karena pesan langsung (DM) kamu ditutup. Silakan buka **Privacy Settings** Discord kamu.');
+                } else {
+                    await message.reply(`❌ Gagal mengirimkan DM: ${result.reason}`);
+                }
+                return;
+            }
+
             /*
             |--------------------------------------------------------------------------
             | ANNOUNCEMENT COMMAND
