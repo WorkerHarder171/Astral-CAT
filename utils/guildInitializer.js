@@ -6,7 +6,7 @@ const {
     PermissionFlagsBits
 } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('./guildSettings');
-const { findExistingChannel, findExistingRole } = require('../commands/auto-setup');
+const { findExistingChannel, findExistingRole, autoSetupOnGuildJoin } = require('../commands/auto-setup');
 const welcomeModule = require('../welcome');
 
 /**
@@ -40,6 +40,9 @@ async function resolveOrCreateGenderRole(guild, isMan) {
     let foundRole = findExistingRole(guild, keywords);
 
     if (foundRole) {
+        if (!foundRole.hoist) {
+            await foundRole.edit({ hoist: true }).catch(() => {});
+        }
         if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
         else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
         return foundRole;
@@ -52,9 +55,10 @@ async function resolveOrCreateGenderRole(guild, isMan) {
             foundRole = await guild.roles.create({
                 name: isMan ? 'Men ♂️' : 'Women ♀️',
                 color: isMan ? 0x3498DB : 0xE91E63,
+                hoist: true,
                 reason: 'Astral Cat: Otomatis membuat role gender untuk kemudahan setup server baru'
             });
-            console.log(`✅ [Auto-Setup] Membuat role "${foundRole.name}" di server: ${guild.name}`);
+            console.log(`✅ [Auto-Setup] Membuat role "${foundRole.name}" (Sidebar aktif) di server: ${guild.name}`);
             if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
             else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
             return foundRole;
@@ -127,92 +131,14 @@ async function autoInitializeGuild(guild, { sendGreeting = true } = {}) {
         // 1. Pastikan record settings tersimpan
         const settings = getGuildSettings(guild.id);
 
-        // Jika server ini sudah selesai disetup (One-Time Lock), jangan ulangi pembuatan/greeting
-        if (settings.autoSetupCompleted) {
-            console.log(`🔒 [Onboarding] Server "${guild.name}" sudah pernah disetup sebelumnya (One-Time Lock aktif).`);
+        // Jika server baru dimasuki (sendGreeting=true) atau belum pernah setup, jalankan auto-setup di channel bot
+        if (!settings.autoSetupCompleted || sendGreeting) {
+            console.log(`🚀 [Onboarding] Menjalankan auto-setup di channel bot untuk: "${guild.name}"...`);
+            await autoSetupOnGuildJoin(guild);
             return;
         }
 
-        // 2. Deteksi channel secara cerdas (gunakan yang sudah ada, jangan buat dobel)
-        const welcomeCh = autoDetectWelcomeChannel(guild);
-        const announceCh = autoDetectAnnouncementChannel(guild);
-
-        // 3. Resolusi role gender (Men & Women) - pakai yang sudah ada jika ada
-        await resolveOrCreateGenderRole(guild, true);
-        await resolveOrCreateGenderRole(guild, false);
-
-        // 4. Jika diminta, kirim kartu sapaan dan tombol onboarding cepat
-        if (sendGreeting) {
-            const targetChannel =
-                guild.systemChannel ||
-                guild.channels.cache.find(c =>
-                    c.isTextBased() &&
-                    c.permissionsFor(guild.members.me)?.has([
-                        PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.EmbedLinks
-                    ])
-                );
-
-            if (targetChannel && targetChannel.isTextBased()) {
-                const prefix = process.env.PREFIX || '!';
-                const botAvatar = guild.client.user.displayAvatarURL({ dynamic: true });
-
-                const embed = new EmbedBuilder()
-                    .setColor(0x7C3AED)
-                    .setTitle('🐾 Halo! Astral Cat Siap Digunakan')
-                    .setDescription([
-                        `Terima kasih telah menambahkan **Astral Cat** ke server **${guild.name}**!`,
-                        '',
-                        '✨ **Semua fitur langsung aktif otomatis tanpa perlu konfigurasi:**',
-                        '',
-                        `• 🎵 **Musik Bebas Delay:** Masuk voice channel lalu ketik \`${prefix}play <lagu>\` atau \`/play\``,
-                        `• 🚻 **Role Gender Otomatis:** Role *Men ♂️* dan *Women ♀️* sudah siap! Pasang panel dengan \`${prefix}setup-role\` atau klik tombol di bawah.`,
-                        `• 🎨 **Kartu Sambutan Anggota:** Otomatis dikirim ke ${welcomeCh ? `<#${welcomeCh.id}>` : 'channel sambutan'} saat ada member baru masuk.`,
-                        `• 📢 **Pengumuman Elegan:** Kirim pengumuman ber-template ke ${announceCh ? `<#${announceCh.id}>` : 'channel pengumuman'} via \`${prefix}announce\``,
-                        `• ⚡ **Slash Command Modern:** Bot ini mendukung Slash Commands (\`/\`). Ketik \`/\` untuk melihat daftar perintah.`,
-                        '',
-                        '👇 *Gunakan tombol pintas di bawah untuk memasang fitur 1-klik:*'
-                    ].join('\n'))
-                    .setThumbnail(botAvatar)
-                    .setFooter({
-                        text: 'Astral Cat Community Bot • Zero Configuration Ready'
-                    })
-                    .setTimestamp();
-
-                const actionRow = new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`quick_auto_setup:${guild.id}`)
-                        .setLabel('Auto-Setup Server (1-Klik)')
-                        .setEmoji('⚡')
-                        .setStyle(ButtonStyle.Success),
-
-                    new ButtonBuilder()
-                        .setCustomId(`quick_setup_role:${guild.id}`)
-                        .setLabel('Pasang Panel Role')
-                        .setEmoji('🚻')
-                        .setStyle(ButtonStyle.Primary),
-
-                    new ButtonBuilder()
-                        .setCustomId(`quick_test_welcome:${guild.id}`)
-                        .setLabel('Tes Welcome Card')
-                        .setEmoji('🎨')
-                        .setStyle(ButtonStyle.Secondary),
-
-                    new ButtonBuilder()
-                        .setCustomId(`quick_help:${guild.id}`)
-                        .setLabel('Buku Panduan')
-                        .setEmoji('📖')
-                        .setStyle(ButtonStyle.Secondary)
-                );
-
-                await targetChannel.send({
-                    embeds: [embed],
-                    components: [actionRow]
-                }).catch(() => {});
-            }
-        }
-
-        console.log(`🎉 [Onboarding] Server "${guild.name}" siap digunakan 100%!`);
+        console.log(`🔒 [Onboarding] Server "${guild.name}" sudah pernah disetup sebelumnya (One-Time Lock aktif).`);
     } catch (error) {
         console.error(`Error inisialisasi server ${guild.name}:`, error);
     }

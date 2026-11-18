@@ -61,8 +61,9 @@ module.exports = async (member) => {
             const botPermissions = welcomeChannel.permissionsFor(member.guild.members.me);
             if (!botPermissions || botPermissions.has(['SendMessages', 'AttachFiles'])) {
                 const card = await welcomeModule.generateWelcomeCard(member);
+                const roleMention = settings.roleChannelId ? ` Jangan lupa ambil role kamu di <#${settings.roleChannelId}>!` : '';
                 await welcomeChannel.send({
-                    content: `🎉 Halo <@${member.user.id}>, selamat datang di **${member.guild.name}**!`,
+                    content: `🎉 Halo <@${member.user.id}>, selamat datang di **${member.guild.name}**!${roleMention}`,
                     files: [card]
                 });
                 console.log(`✅ Welcome card berhasil dikirim ke #${welcomeChannel.name} di ${member.guild.name}`);
@@ -79,22 +80,20 @@ module.exports = async (member) => {
     */
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
-        .setTitle('👋 Selamat Datang!')
+        .setTitle(`👋 Selamat Datang di ${member.guild.name}!`)
         .setDescription([
-            `Halo ${member.user.username}!`,
+            `Halo **${member.user.username}**! Senang kamu bergabung bersama kami.`,
             '',
-            `Selamat datang di **${member.guild.name}**.`,
+            'Untuk melengkapi profil kamu dan menampilkannya di daftar anggota (sidebar kanan), silakan pilih role gender kamu dengan menekan tombol di bawah:',
             '',
-            'Sebelum melanjutkan, silakan pilih role gender kamu:',
+            '♂️ **Men** — Role untuk pria/laki-laki',
+            '♀️ **Women** — Role untuk wanita/perempuan',
             '',
-            '♂️ **Man**',
-            '♀️ **Woman**',
-            '',
-            'Klik salah satu tombol di bawah.'
+            '✨ *Pilihan ini langsung aktif di server!*'
         ].join('\n'))
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setFooter({
-            text: member.guild.name,
+            text: `${member.guild.name} • Onboarding System`,
             iconURL: member.guild.iconURL() || undefined
         })
         .setTimestamp();
@@ -102,36 +101,28 @@ module.exports = async (member) => {
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId(`claim_gender_man:${member.guild.id}`)
-            .setLabel('Man')
-            .setEmoji('♂️')
+            .setLabel('Men ♂️')
             .setStyle(ButtonStyle.Primary),
 
         new ButtonBuilder()
             .setCustomId(`claim_gender_woman:${member.guild.id}`)
-            .setLabel('Woman')
-            .setEmoji('♀️')
-            .setStyle(ButtonStyle.Success)
+            .setLabel('Women ♀️')
+            .setStyle(ButtonStyle.Danger)
     );
 
+    let dmSent = false;
     try {
         await member.send({
             embeds: [embed],
             components: [row]
         });
-
-        console.log(
-            `✅ Gender selection dikirim ke ${member.user.tag}`
-        );
+        dmSent = true;
+        console.log(`✅ DM role onboarding berhasil dikirim ke @${member.user.tag}`);
     } catch (error) {
         if (error.code === 50007) {
-            console.warn(
-                `⚠️ Tidak dapat mengirim DM ke ${member.user.tag}. DM mungkin ditutup.`
-            );
+            console.warn(`⚠️ DM tertutup untuk @${member.user.tag}.`);
         } else {
-            console.error(
-                `❌ Gagal mengirim DM ke ${member.user.tag}:`,
-                error
-            );
+            console.error(`❌ Gagal mengirim DM ke @${member.user.tag}:`, error.message);
         }
     }
 };

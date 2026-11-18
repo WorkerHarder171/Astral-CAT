@@ -91,6 +91,17 @@ const commandsData = [
         ),
 
     new SlashCommandBuilder()
+        .setName('setup-all')
+        .setDescription('Menyiapkan semua text channel & role otomatis untuk Astral Cat')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addBooleanOption(option =>
+            option
+                .setName('force')
+                .setDescription('Paksa jalankan ulang setup meskipun sudah pernah disetel')
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
         .setName('test-welcome')
         .setDescription('Uji coba render kartu sambutan kanvas untuk profilmu'),
 
@@ -330,10 +341,10 @@ async function handleSlashCommand(client, interaction) {
 
         /*
         |--------------------------------------------------------------------------
-        | AUTO-SETUP
+        | AUTO-SETUP & SETUP-ALL
         |--------------------------------------------------------------------------
         */
-        if (commandName === 'auto-setup') {
+        if (commandName === 'auto-setup' || commandName === 'setup-all') {
             await interaction.deferReply();
             const force = interaction.options.getBoolean('force') || false;
             const { executeAutoSetup } = require('./auto-setup');

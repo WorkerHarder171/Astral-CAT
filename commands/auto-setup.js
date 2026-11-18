@@ -27,12 +27,11 @@ function findExistingChannel(guild, keywords, type = ChannelType.GuildText) {
     const normalizedKeywords = keywords.map(normalizeName);
 
     return guild.channels.cache.find(c => {
-        // Cek tipe channel (teks atau voice)
         if (type === ChannelType.GuildText && !c.isTextBased()) return false;
         if (type === ChannelType.GuildVoice && c.type !== ChannelType.GuildVoice) return false;
 
         const normName = normalizeName(c.name);
-        return normalizedKeywords.some(kw => normName.includes(kw));
+        return normalizedKeywords.some(kw => normName === kw || normName.includes(kw));
     }) || null;
 }
 
@@ -55,7 +54,7 @@ function findExistingRole(guild, keywords) {
 /**
  * Menjalankan auto-setup seluruh channel dan role yang dibutuhkan Astral Cat
  * @param {import('discord.js').Guild} guild
- * @param {import('discord.js').GuildMember} executorMember
+ * @param {import('discord.js').GuildMember|null} executorMember
  * @param {boolean} force - Apakah memaksa jalan ulang jika sudah pernah disetup
  * @returns {Promise<EmbedBuilder>}
  */
@@ -63,29 +62,43 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     const botMember = guild.members.me;
     const currentSettings = getGuildSettings(guild.id);
 
+    // Cek keberadaan channel yang sudah dikonfigurasi
+    const hasBot = Boolean(currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId));
+    const hasRules = Boolean(currentSettings.rulesChannelId && guild.channels.cache.has(currentSettings.rulesChannelId));
+    const hasAnnounce = Boolean(currentSettings.announcementChannelId && guild.channels.cache.has(currentSettings.announcementChannelId));
+    const hasWelcome = Boolean(currentSettings.welcomeChannelId && guild.channels.cache.has(currentSettings.welcomeChannelId));
+    const hasRole = Boolean(currentSettings.roleChannelId && guild.channels.cache.has(currentSettings.roleChannelId));
+    const hasPlayMusic = Boolean(currentSettings.musicChannelId && guild.channels.cache.has(currentSettings.musicChannelId));
+
+    const allChannelsPresent = hasBot && hasRules && hasAnnounce && hasWelcome && hasRole && hasPlayMusic;
+
     /*
     |--------------------------------------------------------------------------
-    | 1. PERLINDUNGAN SATU KALI EKSEKUSI (ONE-TIME SETUP)
+    | 1. PERLINDUNGAN ONE-TIME SETUP
     |--------------------------------------------------------------------------
-    | Mencegah duplikasi channel atau reset pengaturan jika sudah pernah di-setup
+    | Jika sudah lengkap semua dan tidak dipaksa force, tampilkan status terkunci
     */
-    if (currentSettings.autoSetupCompleted && !force) {
+    if (currentSettings.autoSetupCompleted && allChannelsPresent && !force) {
         return new EmbedBuilder()
             .setColor(0xFEE75C)
-            .setTitle('🔒 Auto-Setup Sudah Aktif (One-Time Execution)')
+            .setTitle('🔒 Auto-Setup Sudah Aktif & Lengkap (One-Time Execution)')
             .setDescription([
-                `Server **${guild.name}** sebelumnya sudah berhasil disesuaikan dengan Astral Cat.`,
+                `Server **${guild.name}** sudah berhasil disesuaikan dengan seluruh text channel & role Astral Cat.`,
                 '',
                 '### 📌 Konfigurasi Aktif Saat Ini:',
-                `• 🚻 **Role Men:** ${currentSettings.roleMenId ? `<@&${currentSettings.roleMenId}>` : '*Belum terpasang*'}`,
-                `• 🚻 **Role Women:** ${currentSettings.roleWomenId ? `<@&${currentSettings.roleWomenId}>` : '*Belum terpasang*'}`,
-                `• 👋 **Channel Sambutan:** ${currentSettings.welcomeChannelId ? `<#${currentSettings.welcomeChannelId}>` : '*Belum terpasang*'}`,
-                `• 📢 **Channel Pengumuman:** ${currentSettings.announcementChannelId ? `<#${currentSettings.announcementChannelId}>` : '*Belum terpasang*'}`,
+                `• 🤖 **Channel Bot:** <#${currentSettings.botChannelId}>`,
+                `• 📜 **Channel Rules:** <#${currentSettings.rulesChannelId}>`,
+                `• 📢 **Channel Pengumuman:** <#${currentSettings.announcementChannelId}>`,
+                `• 👋 **Channel Sambutan:** <#${currentSettings.welcomeChannelId}>`,
+                `• 🚻 **Panel Role:** <#${currentSettings.roleChannelId}>`,
+                `• 🎵 **Channel Play Music:** <#${currentSettings.musicChannelId}>`,
+                `• 🚻 **Role Men (Sidebar):** ${currentSettings.roleMenId ? `<@&${currentSettings.roleMenId}>` : '*Belum terpasang*'}`,
+                `• 🚻 **Role Women (Sidebar):** ${currentSettings.roleWomenId ? `<@&${currentSettings.roleWomenId}>` : '*Belum terpasang*'}`,
                 '',
-                '✨ *Bot sudah terhubung dan menggunakan channel di atas tanpa perlu di-setup ulang.*',
+                '✨ *Semua channel sudah siap digunakan tanpa duplikasi.*',
                 '',
-                '💡 **Ingin Memaksa Setup Ulang?**',
-                'Ketik `!auto-setup force` atau `/auto-setup force:True` untuk memperbarui paksa seluruh pengaturan.'
+                '💡 **Ingin Memperbarui Paksa?**',
+                'Ketik `!setup-all force` atau `/auto-setup force:True`'
             ].join('\n'))
             .setFooter({ text: 'Proteksi Anti-Duplikasi • Astral Cat' })
             .setTimestamp();
@@ -109,7 +122,7 @@ async function executeAutoSetup(guild, executorMember, force = false) {
 
     /*
     |--------------------------------------------------------------------------
-    | A. ROLE GENDER (Men & Women) - SMART REUSE OR CREATE
+    | A. ROLE GENDER (Men & Women) - TAMPIL DI SIDEBAR KANAN (HOIST: TRUE)
     |--------------------------------------------------------------------------
     */
     let menRole = findExistingRole(guild, ['men', 'man', 'pria', 'lakilaki', 'laki', 'cowok']);
@@ -117,11 +130,17 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         menRole = await guild.roles.create({
             name: 'Men ♂️',
             color: 0x3498DB,
-            reason: 'Astral Cat: Auto-Setup Role Gender'
+            hoist: true,
+            reason: 'Astral Cat: Auto-Setup Role Gender (Tampil di sidebar kanan)'
         });
-        logSteps.push(`✅ Dibuat role baru: **${menRole.name}**`);
+        logSteps.push(`✅ Dibuat role baru: **${menRole.name}** *(Sidebar status aktif)*`);
     } else {
-        logSteps.push(`ℹ️ Menggunakan role yang ada: **${menRole.name}**`);
+        if (!menRole.hoist) {
+            await menRole.edit({ hoist: true }).catch(() => {});
+            logSteps.push(`ℹ️ Memperbarui role **${menRole.name}** agar tampil di sidebar kanan.`);
+        } else {
+            logSteps.push(`ℹ️ Menggunakan role yang ada: **${menRole.name}**`);
+        }
     }
 
     let womenRole = findExistingRole(guild, ['women', 'woman', 'wanita', 'perempuan', 'cewek']);
@@ -129,32 +148,99 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         womenRole = await guild.roles.create({
             name: 'Women ♀️',
             color: 0xE91E63,
-            reason: 'Astral Cat: Auto-Setup Role Gender'
+            hoist: true,
+            reason: 'Astral Cat: Auto-Setup Role Gender (Tampil di sidebar kanan)'
         });
-        logSteps.push(`✅ Dibuat role baru: **${womenRole.name}**`);
+        logSteps.push(`✅ Dibuat role baru: **${womenRole.name}** *(Sidebar status aktif)*`);
     } else {
-        logSteps.push(`ℹ️ Menggunakan role yang ada: **${womenRole.name}**`);
+        if (!womenRole.hoist) {
+            await womenRole.edit({ hoist: true }).catch(() => {});
+            logSteps.push(`ℹ️ Memperbarui role **${womenRole.name}** agar tampil di sidebar kanan.`);
+        } else {
+            logSteps.push(`ℹ️ Menggunakan role yang ada: **${womenRole.name}**`);
+        }
     }
 
     /*
     |--------------------------------------------------------------------------
-    | B. CHANNEL SAMBUTAN (Welcome Channel) - SMART REUSE OR CREATE
+    | B. TEXT CHANNEL: 🤖・bot (Bot Commands Center)
     |--------------------------------------------------------------------------
     */
-    let welcomeChannel = findExistingChannel(guild, [
-        'welcome',
-        'selamatdatang',
-        'sambutan',
-        'welcomer',
-        'memberbaru',
-        'join'
+    let botChannel = findExistingChannel(guild, [
+        'bot',
+        'botcommands',
+        'botcmd',
+        'commands',
+        'cmd'
     ], ChannelType.GuildText);
 
-    if (!welcomeChannel) {
-        welcomeChannel = await guild.channels.create({
-            name: '👋・selamat-datang',
+    if (!botChannel) {
+        botChannel = await guild.channels.create({
+            name: '🤖・bot',
             type: ChannelType.GuildText,
-            topic: 'Channel sambutan resmi anggota baru oleh Astral Cat',
+            topic: 'Saluran khusus perintah & interaksi bot Astral Cat',
+            permissionOverwrites: [
+                {
+                    id: guild.roles.everyone.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory
+                    ]
+                },
+                {
+                    id: botMember.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.EmbedLinks,
+                        PermissionFlagsBits.AttachFiles
+                    ]
+                }
+            ]
+        });
+
+        const botGuideEmbed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle('🤖 Astral Cat Bot Center')
+            .setDescription([
+                'Selamat datang di saluran interaksi bot Astral Cat!',
+                '',
+                'Gunakan saluran ini untuk mengeksekusi perintah bot agar channel obrolan utama tetap bersih dan rapi.',
+                '',
+                '### 📌 Perintah Populer:',
+                '• `!help` atau `/help` — Melihat daftar seluruh perintah',
+                '• `!ping` atau `/ping` — Memeriksa status & latensi bot',
+                '• `!setup-all` — Menjalankan setup otomatis server',
+                '• `!announce` — Mengirim pengumuman resmi server',
+                '• `!play <judul lagu>` — Memutar musik di voice channel'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Bot Center`, iconURL: guild.iconURL() || undefined });
+
+        await botChannel.send({ embeds: [botGuideEmbed] });
+        logSteps.push(`✅ Dibuat channel baru: <#${botChannel.id}>`);
+    } else {
+        logSteps.push(`ℹ️ Menggunakan channel bot yang ada: <#${botChannel.id}>`);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | C. TEXT CHANNEL: 📜・rules (Server Rules)
+    |--------------------------------------------------------------------------
+    */
+    let rulesChannel = findExistingChannel(guild, [
+        'rules',
+        'rule',
+        'peraturan',
+        'tatatertib',
+        'terms'
+    ], ChannelType.GuildText);
+
+    if (!rulesChannel) {
+        rulesChannel = await guild.channels.create({
+            name: '📜・rules',
+            type: ChannelType.GuildText,
+            topic: 'Peraturan dan tata tertib resmi komunitas server',
             permissionOverwrites: [
                 {
                     id: guild.roles.everyone.id,
@@ -166,20 +252,163 @@ async function executeAutoSetup(guild, executorMember, force = false) {
                     allow: [
                         PermissionFlagsBits.ViewChannel,
                         PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.AttachFiles,
                         PermissionFlagsBits.EmbedLinks
                     ]
                 }
             ]
         });
-        logSteps.push(`✅ Dibuat channel baru: <#${welcomeChannel.id}>`);
+
+        const rulesEmbed = new EmbedBuilder()
+            .setColor(0xED4245)
+            .setTitle('📜 Peraturan Resmi Server')
+            .setDescription([
+                'Selamat datang di server! Demi kenyamanan bersama, setiap anggota diwajibkan mematuhi aturan berikut:',
+                '',
+                '1. **Saling Menghargai & Sopan Santun:** Dilarang melakukan ujaran kebencian, diskriminasi, perundungan (*bullying*), atau pelecehan dalam bentuk apa pun.',
+                '2. **Dilarang Spam & Iklan Liar:** Hindari pengiriman pesan beruntun (*flooding*), spam mention, membagikan link server lain, atau promosi komersial tanpa izin pengelola.',
+                '3. **Gunakan Channel Sesuai Fungsinya:**',
+                `   • Gunakan channel <#${botChannel.id}> untuk perintah bot.`,
+                '   • Obrolan santai dilakukan pada channel umum yang tersedia.',
+                '4. **Keamanan & Privasi:** Dilarang keras menyebarkan identitas atau data pribadi (*doxxing*) dan mengirim tautan mencurigakan (*phishing/malware*).',
+                '5. **Patuhi Ketentuan Discord:** Seluruh pedoman Discord Community Guidelines & ToS berlaku penuh di server ini.',
+                '',
+                '✨ *Pelanggaran dapat berakibat peringatan, mute, kick, hingga banned permanen.*'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Rules & Guidelines`, iconURL: guild.iconURL() || undefined })
+            .setTimestamp();
+
+        await rulesChannel.send({ embeds: [rulesEmbed] });
+        logSteps.push(`✅ Dibuat channel baru: <#${rulesChannel.id}>`);
     } else {
-        logSteps.push(`ℹ️ Langsung menggunakan channel sambutan yang ada: <#${welcomeChannel.id}>`);
+        logSteps.push(`ℹ️ Menggunakan channel rules yang ada: <#${rulesChannel.id}>`);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | C. CHANNEL PILIH ROLE (Gender Selection Panel) - SMART REUSE OR CREATE
+    | D. TEXT CHANNEL: 📢・announcement (Server Announcements)
+    |--------------------------------------------------------------------------
+    */
+    let announceChannel = findExistingChannel(guild, [
+        'announcement',
+        'announcements',
+        'pengumuman',
+        'info',
+        'news',
+        'broadcast'
+    ], ChannelType.GuildText);
+
+    if (!announceChannel) {
+        announceChannel = await guild.channels.create({
+            name: '📢・announcement',
+            type: ChannelType.GuildText,
+            topic: 'Pengumuman dan informasi resmi server dari pengelola',
+            permissionOverwrites: [
+                {
+                    id: guild.roles.everyone.id,
+                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
+                    deny: [PermissionFlagsBits.SendMessages]
+                },
+                {
+                    id: botMember.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.EmbedLinks,
+                        PermissionFlagsBits.MentionEveryone
+                    ]
+                }
+            ]
+        });
+
+        const announceEmbed = new EmbedBuilder()
+            .setColor(0xFEE75C)
+            .setTitle('📢 Pengumuman Resmi Server')
+            .setDescription([
+                'Channel ini dipergunakan oleh pihak admin & staf server untuk mengumumkan kabar, pembaruan penting, dan kegiatan resmi komunitas.',
+                '',
+                '🔔 *Aktifkan notifikasi pada channel ini agar kamu selalu mendapatkan informasi terkini!*'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Official Announcement`, iconURL: guild.iconURL() || undefined })
+            .setTimestamp();
+
+        await announceChannel.send({ embeds: [announceEmbed] });
+        logSteps.push(`✅ Dibuat channel baru: <#${announceChannel.id}>`);
+    } else {
+        logSteps.push(`ℹ️ Menggunakan channel pengumuman yang ada: <#${announceChannel.id}>`);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | E. TEXT CHANNEL: 🎵・play-music (Music Player Text Channel)
+    |--------------------------------------------------------------------------
+    */
+    let playMusicChannel = findExistingChannel(guild, [
+        'playmusic',
+        'play-music',
+        'music',
+        'musik',
+        'botmusic',
+        'pemutarmusik'
+    ], ChannelType.GuildText);
+
+    if (!playMusicChannel) {
+        playMusicChannel = await guild.channels.create({
+            name: '🎵・play-music',
+            type: ChannelType.GuildText,
+            topic: 'Ketik !play <judul lagu> atau /play untuk memutar musik di voice channel',
+            permissionOverwrites: [
+                {
+                    id: guild.roles.everyone.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.ReadMessageHistory
+                    ]
+                },
+                {
+                    id: botMember.id,
+                    allow: [
+                        PermissionFlagsBits.ViewChannel,
+                        PermissionFlagsBits.SendMessages,
+                        PermissionFlagsBits.EmbedLinks,
+                        PermissionFlagsBits.AttachFiles
+                    ]
+                }
+            ]
+        });
+
+        const musicGuideEmbed = new EmbedBuilder()
+            .setColor(0x9B59B6)
+            .setTitle('🎵 Astral Cat Music Player')
+            .setDescription([
+                'Gunakan channel ini untuk mencari dan memutar musik di voice channel mana pun!',
+                '',
+                '### 🎧 Panduan Memutar Musik:',
+                '1. Masuk ke salah satu voice channel di server.',
+                '2. Ketik perintah musik di bawah ini:',
+                '',
+                '### 📜 Daftar Perintah Musik:',
+                '• `!play <judul / URL>` atau `/play` — Memutar lagu dari YouTube atau Spotify',
+                '• `!pause` atau `/pause` — Menjeda musik yang sedang berjalan',
+                '• `!resume` atau `/resume` — Melanjutkan pemutaran musik',
+                '• `!skip` atau `/skip` — Melewati lagu ke antrean selanjutnya',
+                '• `!queue` atau `/queue` — Menampilkan antrean daftar putar',
+                '• `!nowplaying` atau `/nowplaying` — Menampilkan informasi lagu saat ini',
+                '• `!stop` atau `/stop` — Menghentikan pemutaran musik & membersihkan antrean',
+                '',
+                '🔊 *Audio jernih & bebas jeda dipersembahkan oleh Astral Cat!*'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Music Player`, iconURL: guild.iconURL() || undefined });
+
+        await playMusicChannel.send({ embeds: [musicGuideEmbed] });
+        logSteps.push(`✅ Dibuat channel baru: <#${playMusicChannel.id}>`);
+    } else {
+        logSteps.push(`ℹ️ Menggunakan channel play-music yang ada: <#${playMusicChannel.id}>`);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | F. TEXT CHANNEL: 🚻・pilih-role (Gender Role Panel)
     |--------------------------------------------------------------------------
     */
     let roleChannel = findExistingChannel(guild, [
@@ -190,7 +419,6 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         'gender'
     ], ChannelType.GuildText);
 
-    let sentRolePanel = false;
     if (!roleChannel) {
         roleChannel = await guild.channels.create({
             name: '🚻・pilih-role',
@@ -214,39 +442,36 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         });
         const panel = await createRolePanel(guild);
         await roleChannel.send(panel);
-        sentRolePanel = true;
-        logSteps.push(`✅ Dibuat channel & panel tombol: <#${roleChannel.id}>`);
+        logSteps.push(`✅ Dibuat channel & panel tombol role: <#${roleChannel.id}>`);
     } else {
-        // Cek jika panel tombol belum pernah dikirimkan di channel yang ada
         const messages = await roleChannel.messages.fetch({ limit: 10 }).catch(() => null);
         const hasPanel = messages && messages.some(m => m.author.id === botMember.id && m.components.length > 0);
         if (!hasPanel) {
             const panel = await createRolePanel(guild);
             await roleChannel.send(panel);
-            sentRolePanel = true;
         }
-        logSteps.push(`ℹ️ Langsung menggunakan channel role yang ada: <#${roleChannel.id}>`);
+        logSteps.push(`ℹ️ Menggunakan channel role yang ada: <#${roleChannel.id}>`);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | D. CHANNEL PENGUMUMAN (Announcement Channel) - SMART REUSE OR CREATE
+    | G. TEXT CHANNEL: 👋・selamat-datang (Welcome Channel)
     |--------------------------------------------------------------------------
     */
-    let announceChannel = findExistingChannel(guild, [
-        'pengumuman',
-        'announcement',
-        'announcements',
-        'info',
-        'news',
-        'broadcast'
+    let welcomeChannel = findExistingChannel(guild, [
+        'welcome',
+        'selamatdatang',
+        'sambutan',
+        'welcomer',
+        'memberbaru',
+        'join'
     ], ChannelType.GuildText);
 
-    if (!announceChannel) {
-        announceChannel = await guild.channels.create({
-            name: '📢・pengumuman',
+    if (!welcomeChannel) {
+        welcomeChannel = await guild.channels.create({
+            name: '👋・selamat-datang',
             type: ChannelType.GuildText,
-            topic: 'Pengumuman resmi server dari admin Astral Cat',
+            topic: 'Saluran sambutan resmi anggota baru oleh Astral Cat',
             permissionOverwrites: [
                 {
                     id: guild.roles.everyone.id,
@@ -258,90 +483,146 @@ async function executeAutoSetup(guild, executorMember, force = false) {
                     allow: [
                         PermissionFlagsBits.ViewChannel,
                         PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.EmbedLinks,
-                        PermissionFlagsBits.MentionEveryone
+                        PermissionFlagsBits.AttachFiles,
+                        PermissionFlagsBits.EmbedLinks
                     ]
                 }
             ]
         });
-        logSteps.push(`✅ Dibuat channel baru: <#${announceChannel.id}>`);
+
+        const welcomeGuideEmbed = new EmbedBuilder()
+            .setColor(0x57F287)
+            .setTitle(`🎉 Selamat Datang di ${guild.name}!`)
+            .setDescription([
+                'Halo dan selamat bergabung di komunitas kami!',
+                '',
+                '📌 **Langkah Awal Anggota Baru:**',
+                `1. 📜 Silakan baca tata tertib di <#${rulesChannel.id}>`,
+                `2. 🚻 Ambil role gender kamu di <#${roleChannel.id}> atau langsung dari pesan DM otomatis`,
+                `3. 🎵 Putar musik favoritmu di <#${playMusicChannel.id}>`,
+                `4. 🤖 Gunakan bot commands di <#${botChannel.id}>`,
+                '',
+                'Selamat menikmati waktu dan selamat berteman! 🚀'
+            ].join('\n'))
+            .setFooter({ text: `${guild.name} • Welcomer`, iconURL: guild.iconURL() || undefined })
+            .setTimestamp();
+
+        await welcomeChannel.send({ embeds: [welcomeGuideEmbed] });
+        logSteps.push(`✅ Dibuat channel baru: <#${welcomeChannel.id}>`);
     } else {
-        logSteps.push(`ℹ️ Langsung menggunakan channel pengumuman yang ada: <#${announceChannel.id}>`);
+        logSteps.push(`ℹ️ Menggunakan channel sambutan yang ada: <#${welcomeChannel.id}>`);
     }
 
     /*
     |--------------------------------------------------------------------------
-    | E. VOICE ROOM MUSIK (Music Lounge) - SMART REUSE OR CREATE
-    |--------------------------------------------------------------------------
-    */
-    let musicVoice = findExistingChannel(guild, [
-        'music',
-        'musik',
-        'lounge',
-        'voice',
-        'suara'
-    ], ChannelType.GuildVoice);
-
-    if (!musicVoice) {
-        musicVoice = await guild.channels.create({
-            name: '🎵 │ Music Lounge',
-            type: ChannelType.GuildVoice,
-            permissionOverwrites: [
-                {
-                    id: guild.roles.everyone.id,
-                    allow: [
-                        PermissionFlagsBits.ViewChannel,
-                        PermissionFlagsBits.Connect,
-                        PermissionFlagsBits.Speak
-                    ]
-                }
-            ]
-        });
-        logSteps.push(`✅ Dibuat voice room: <#${musicVoice.id}>`);
-    } else {
-        logSteps.push(`ℹ️ Langsung menggunakan voice room yang ada: <#${musicVoice.id}>`);
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | F. SIMPAN SEMUA KONFIGURASI KE GUILD SETTINGS (KUNCI SATU KALI EKSEKUSI)
+    | H. SIMPAN SEMUA KONFIGURASI KE GUILD SETTINGS
     |--------------------------------------------------------------------------
     */
     updateGuildSettings(guild.id, {
-        welcomeChannelId: welcomeChannel.id,
+        botChannelId: botChannel.id,
+        rulesChannelId: rulesChannel.id,
         announcementChannelId: announceChannel.id,
+        welcomeChannelId: welcomeChannel.id,
+        roleChannelId: roleChannel.id,
+        musicChannelId: playMusicChannel.id,
         roleMenId: menRole.id,
         roleWomenId: womenRole.id,
         autoSetupCompleted: true,
         autoSetupDate: new Date().toISOString()
     });
 
+    const executorTag = executorMember?.user?.tag || 'Astral Cat (Auto Onboarding)';
+
     const reportEmbed = new EmbedBuilder()
         .setColor(0x57F287)
-        .setTitle('✨ Server Berhasil Menyesuaikan Astral Cat!')
+        .setTitle('✨ Pengaturan Server Astral Cat Selesai!')
         .setDescription([
-            `Semua fitur Astral Cat kini telah diatur otomatis untuk **${guild.name}**.`,
+            `Semua fitur dan text channel Astral Cat kini telah disesuaikan untuk **${guild.name}**.`,
             '',
-            '### 📋 Hasil Auto-Setup (Bebas Duplikasi):',
-            `• 🚻 **Role Gender:** ${menRole} & ${womenRole}`,
+            '### 📋 Hasil Pengaturan Server:',
+            `• 🤖 **Channel Bot:** <#${botChannel.id}>`,
+            `• 📜 **Channel Rules:** <#${rulesChannel.id}> *(Aturan resmi aktif)*`,
+            `• 📢 **Channel Announcement:** <#${announceChannel.id}> *(Siap digunakan)*`,
+            `• 🎵 **Channel Play Music:** <#${playMusicChannel.id}> *(Voice Lounge dinonaktifkan)*`,
             `• 👋 **Channel Sambutan:** <#${welcomeChannel.id}> *(Banner kanvas otomatis)*`,
-            `• 🎫 **Panel Pilih Role:** <#${roleChannel.id}> *(Siap diklik member)*`,
-            `• 📢 **Pengumuman Admin:** <#${announceChannel.id}>`,
-            `• 🎵 **Voice Room Musik:** <#${musicVoice.id}>`,
-            '',
-            '### 🔒 Proteksi Pengaturan:',
-            'Pengaturan ini **telah dikunci (hanya berjalan 1 kali)** sehingga bot tidak akan membuat channel dobel di masa mendatang.',
+            `• 🚻 **Panel Role:** <#${roleChannel.id}> *(Panel tombol interaktif)*`,
+            `• 👥 **Role Sidebar:** ${menRole} & ${womenRole} *(Tampil terpisah di kanan)*`,
+            `• 📩 **Auto DM Onboarding:** Otomatis mengirim DM pemilihan role saat member bergabung`,
             '',
             '### 💡 Langkah Terakhir Admin (Penting!):',
-            'Buka **Server Settings > Roles**, lalu **tarik role "Astral Cat" ke atas** (melebihi role Men & Women) agar bot berwenang memberikan role.',
+            'Buka **Server Settings > Roles**, lalu pastikan role **"Astral Cat" berada di posisi atas** melebihi role *Men* & *Women* agar bot dapat memberikan role secara lancar.',
             '',
-            'Semua perintah siap digunakan langsung!'
+            'Semua perintah kini siap dinikmati langsung!'
         ].join('\n'))
         .setThumbnail(guild.iconURL({ dynamic: true }) || undefined)
-        .setFooter({ text: `Auto-Setup selesai • Dijalankan oleh ${executorMember.user.tag}` })
+        .setFooter({ text: `Auto-Setup selesai • Dijalankan oleh ${executorTag}` })
         .setTimestamp();
 
     return reportEmbed;
+}
+
+/**
+ * Jalankan setup otomatis saat bot pertama kali masuk ke server baru
+ * @param {import('discord.js').Guild} guild
+ */
+async function autoSetupOnGuildJoin(guild) {
+    try {
+        const botMember = guild.members.me;
+
+        // 1. Cari atau buat channel bot terlebih dahulu
+        let botChannel = findExistingChannel(guild, [
+            'bot',
+            'botcommands',
+            'botcmd',
+            'commands',
+            'cmd'
+        ], ChannelType.GuildText);
+
+        if (!botChannel) {
+            botChannel = await guild.channels.create({
+                name: '🤖・bot',
+                type: ChannelType.GuildText,
+                topic: 'Saluran khusus perintah & interaksi bot Astral Cat',
+                permissionOverwrites: [
+                    {
+                        id: guild.roles.everyone.id,
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.ReadMessageHistory
+                        ]
+                    },
+                    {
+                        id: botMember.id,
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.EmbedLinks,
+                            PermissionFlagsBits.AttachFiles
+                        ]
+                    }
+                ]
+            });
+        }
+
+        // 2. Kirim pesan notifikasi awal di channel bot
+        const progressMsg = await botChannel.send({
+            content: `⚡ **Halo ${guild.name}!** Astral Cat baru saja masuk ke server. Sedang menjalankan \`!setup-all\` secara otomatis...`
+        });
+
+        // 3. Jalankan executeAutoSetup
+        const resultEmbed = await executeAutoSetup(guild, botMember, true);
+
+        // 4. Perbarui pesan dengan embed laporan
+        await progressMsg.edit({
+            content: `🎉 **Auto-Setup Selesai!** Selamat menggunakan Astral Cat di **${guild.name}**.`,
+            embeds: [resultEmbed]
+        });
+
+        console.log(`🎉 [Auto-Join Setup] Berhasil mengonfigurasi server: ${guild.name}`);
+    } catch (error) {
+        console.error(`❌ [Auto-Join Setup] Gagal mengonfigurasi ${guild.name}:`, error);
+    }
 }
 
 /**
@@ -352,11 +633,11 @@ async function handleAutoSetupCommand(message, args = []) {
         !message.member.permissions.has(PermissionFlagsBits.ManageGuild) &&
         !message.member.permissions.has(PermissionFlagsBits.Administrator)
     ) {
-        return message.reply('❌ Kamu memerlukan izin **Manage Server** atau **Administrator** untuk menjalankan auto-setup.');
+        return message.reply('❌ Kamu memerlukan izin **Manage Server** atau **Administrator** untuk menjalankan setup.');
     }
 
     const force = args[0]?.toLowerCase() === 'force';
-    const waitMsg = await message.reply('⚡ Sedang memeriksa dan mengonfigurasi server secara otomatis...');
+    const waitMsg = await message.reply('⚡ Sedang memeriksa dan menyesuaikan seluruh channel & role server...');
 
     try {
         const resultEmbed = await executeAutoSetup(message.guild, message.member, force);
@@ -372,5 +653,6 @@ module.exports = {
     findExistingChannel,
     findExistingRole,
     executeAutoSetup,
+    autoSetupOnGuildJoin,
     handleAutoSetupCommand
 };

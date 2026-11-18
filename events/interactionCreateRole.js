@@ -30,6 +30,9 @@ async function resolveOrCreateGenderRole(guild, isMan) {
     );
 
     if (foundRole) {
+        if (!foundRole.hoist) {
+            await foundRole.edit({ hoist: true }).catch(() => {});
+        }
         if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
         else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
         return foundRole;
@@ -42,9 +45,10 @@ async function resolveOrCreateGenderRole(guild, isMan) {
             foundRole = await guild.roles.create({
                 name: isMan ? 'Men ♂️' : 'Women ♀️',
                 color: isMan ? 0x3498DB : 0xE91E63,
-                reason: 'Astral Cat: Otomatis membuat role gender untuk kemudahan setup server'
+                hoist: true,
+                reason: 'Astral Cat: Otomatis membuat role gender (Tampil di sidebar kanan)'
             });
-            console.log(`✅ Otomatis membuat role "${foundRole.name}" di server: ${guild.name}`);
+            console.log(`✅ Otomatis membuat role "${foundRole.name}" (Sidebar aktif) di server: ${guild.name}`);
             if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
             else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
             return foundRole;
