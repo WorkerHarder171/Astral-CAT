@@ -1,5 +1,10 @@
 // Astral Cat Settings Page Logic
 document.addEventListener('DOMContentLoaded', async () => {
+    if (window.location.hostname.includes('vercel.app')) {
+        const notice = document.getElementById('vercel-notice');
+        if (notice) notice.classList.remove('hidden');
+    }
+
     loadSettings();
     loadChannelsAndRoles();
 

@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "outputDirectory": "web/public",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/terms", "destination": "/terms.html" },
+    { "source": "/settings", "destination": "/settings.html" }
+  ]
+}
