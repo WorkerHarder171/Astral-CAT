@@ -1,8 +1,12 @@
+const fs = require('fs');
 const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
 const ytdlp = require('youtube-dl-exec');
-const ffmpegPath = require('ffmpeg-static');
+const staticFfmpeg = require('ffmpeg-static');
+
+// Gunakan ffmpeg-static jika ada dan valid; jika tidak, gunakan ffmpeg bawaan OS (mis. /usr/bin/ffmpeg)
+const ffmpegPath = (staticFfmpeg && fs.existsSync(staticFfmpeg)) ? staticFfmpeg : 'ffmpeg';
 
 function isYoutubeUrl(value) {
     try {
@@ -108,6 +112,10 @@ function createFFmpegStream(inputStream) {
         ffmpeg.stdin.destroy(error);
     });
 
+    ffmpeg.on('error', error => {
+        console.error('[createFFmpegStream Error]:', error.message);
+    });
+
     ffmpeg.stderr.on('data', data => {
         const message = data.toString().trim();
 
@@ -160,11 +168,15 @@ function createAudioStream(url) {
 
     ytProcess.catch(() => {});
 
-    ytProcess.on('error', () => {});
+    ytProcess.on('error', err => {
+        console.error('[yt-dlp error]:', err.message);
+    });
     ytProcess.stdout.on('error', () => {});
     ffmpeg.stdin.on('error', () => {});
     ffmpeg.stdout.on('error', () => {});
-    ffmpeg.on('error', () => {});
+    ffmpeg.on('error', err => {
+        console.error('[FFmpeg error]:', err.message);
+    });
 
     ytProcess.stderr.on('data', data => {
         const msg = data.toString().trim();
