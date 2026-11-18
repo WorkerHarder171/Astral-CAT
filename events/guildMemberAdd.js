@@ -4,12 +4,67 @@ const {
     ButtonBuilder,
     ButtonStyle
 } = require('discord.js');
+const welcomeModule = require('../welcome');
+const { getGuildSettings } = require('../utils/guildSettings');
 
 module.exports = async (member) => {
     if (member.user.bot) {
         return;
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | 1. WELCOME CARD CANVAS DI SERVER CHANNEL (MULTI-SERVER READY)
+    |--------------------------------------------------------------------------
+    */
+    try {
+        const settings = getGuildSettings(member.guild.id);
+        let welcomeChannel = null;
+
+        // Cari berdasarkan konfigurasi guild
+        if (settings.welcomeChannelId) {
+            welcomeChannel = member.guild.channels.cache.get(settings.welcomeChannelId);
+        }
+
+        // Fallback ke .env jika ID ada di server ini
+        if (!welcomeChannel && process.env.WELCOME_CHANNEL_ID) {
+            welcomeChannel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID.trim());
+        }
+
+        // Auto-detect nama channel umum sambutan
+        if (!welcomeChannel) {
+            const channelNames = ['welcome', 'selamat-datang', 'sambutan', 'general', 'chat', 'utama', 'lounge'];
+            welcomeChannel = member.guild.channels.cache.find(c =>
+                c.isTextBased() && channelNames.some(name => c.name.toLowerCase().includes(name))
+            );
+        }
+
+        // Fallback terakhir: systemChannel server
+        if (!welcomeChannel && member.guild.systemChannel) {
+            welcomeChannel = member.guild.systemChannel;
+        }
+
+        // Jika channel ditemukan dan bot punya izin mengirim pesan
+        if (welcomeChannel && welcomeChannel.isTextBased()) {
+            const botPermissions = welcomeChannel.permissionsFor(member.guild.members.me);
+            if (!botPermissions || botPermissions.has(['SendMessages', 'AttachFiles'])) {
+                const card = await welcomeModule.generateWelcomeCard(member);
+                await welcomeChannel.send({
+                    content: `🎉 Halo <@${member.user.id}>, selamat datang di **${member.guild.name}**!`,
+                    files: [card]
+                });
+                console.log(`✅ Welcome card berhasil dikirim ke #${welcomeChannel.name} di ${member.guild.name}`);
+            }
+        }
+    } catch (err) {
+        console.error(`❌ Gagal mengirim welcome card di ${member.guild.name}:`, err.message);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | 2. GENDER SELECTION ONBOARDING DM
+    |--------------------------------------------------------------------------
+    */
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('👋 Selamat Datang!')

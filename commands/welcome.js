@@ -1,4 +1,5 @@
 const { PermissionFlagsBits } = require('discord.js');
+const { updateGuildSettings } = require('../utils/guildSettings');
 
 async function handleWelcomeCommands(message, command, welcomeModule, setWelcomeChannel) {
     if (command === 'test-welcome' || command === 'testwelcome') {
@@ -28,8 +29,9 @@ async function handleWelcomeCommands(message, command, welcomeModule, setWelcome
             return message.reply('❌ Harap tag channel tujuan!\nContoh: `!setup-welcome #welcome`');
         }
 
-        setWelcomeChannel(targetChannel.id);
-        return message.reply(`✅ Channel sambutan berhasil diatur ke <#${targetChannel.id}>!`);
+        updateGuildSettings(message.guild.id, { welcomeChannelId: targetChannel.id });
+        if (setWelcomeChannel) setWelcomeChannel(targetChannel.id);
+        return message.reply(`✅ Channel sambutan untuk server ini berhasil diatur ke <#${targetChannel.id}>!`);
     }
 }
 
