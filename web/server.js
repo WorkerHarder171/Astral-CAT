@@ -86,6 +86,26 @@ app.post('/api/settings', (req, res) => {
     }
 });
 
+// API: List Guilds (Multi-Server)
+app.get('/api/guilds', (req, res) => {
+    if (!discordClient || !discordClient.isReady || !discordClient.isReady()) {
+        return res.json({ guilds: [] });
+    }
+
+    const { getAllGuildSettings } = require('../utils/guildSettings');
+    const allSettings = getAllGuildSettings();
+
+    const guilds = discordClient.guilds.cache.map(g => ({
+        id: g.id,
+        name: g.name,
+        icon: g.iconURL({ dynamic: true, size: 128 }),
+        memberCount: g.memberCount,
+        settings: allSettings[g.id] || {}
+    }));
+
+    res.json({ guilds });
+});
+
 // API: List Guild Channels (if bot is connected)
 app.get('/api/channels', (req, res) => {
     if (!discordClient || !discordClient.isReady || !discordClient.isReady()) {

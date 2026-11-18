@@ -4,7 +4,8 @@ const {
     Client,
     GatewayIntentBits,
     Events,
-    MessageFlags
+    MessageFlags,
+    EmbedBuilder
 } = require('discord.js');
 
 const musicModule = require('./music-player');
@@ -309,6 +310,65 @@ client.on(
                 'GuildMemberAdd error:',
                 error
             );
+        }
+    }
+);
+
+/*
+|--------------------------------------------------------------------------
+| BOT ADDED TO NEW GUILD (AUTO ONBOARDING)
+|--------------------------------------------------------------------------
+*/
+
+client.on(
+    Events.GuildCreate,
+    async (guild) => {
+        try {
+            console.log(
+                `🎉 Astral Cat ditambahkan ke server baru: ${guild.name} (ID: ${guild.id}, Members: ${guild.memberCount})`
+            );
+
+            // Cari channel sistem atau teks channel yang dapat dikirimi pesan
+            const channel =
+                guild.systemChannel ||
+                guild.channels.cache.find(
+                    c =>
+                        c.isTextBased() &&
+                        c
+                            .permissionsFor(guild.members.me)
+                            ?.has(['SendMessages', 'EmbedLinks'])
+                );
+
+            if (!channel) return;
+
+            const prefix = getPrefix();
+            const embed = new EmbedBuilder()
+                .setColor(0x7C3AED)
+                .setTitle('🐾 Halo! Astral Cat Siap Digunakan')
+                .setDescription([
+                    `Terima kasih telah menambahkan **Astral Cat** ke server **${guild.name}**!`,
+                    '',
+                    'Bot ini sudah **langsung siap digunakan** tanpa perlu pengaturan rumit:',
+                    '',
+                    `• 🎵 **Musik:** Masuk ke voice channel lalu ketik \`${prefix}play <lagu>\``,
+                    `• 🎨 **Kartu Sambutan:** Ketik \`${prefix}setup-welcome #channel\` untuk memilih channel banner`,
+                    `• 🚻 **Role Gender:** Ketik \`${prefix}setup-role\` *(Role Men & Women akan otomatis dideteksi atau dibuatkan!)*`,
+                    `• 📢 **Pengumuman:** Ketik \`${prefix}announce #channel\` untuk membuat pengumuman ber-template`,
+                    `• ⚡ **Bantuan Lengkap:** Ketik \`${prefix}help\``,
+                    '',
+                    '💡 *Tips Admin: Pastikan posisi Role bot "Astral Cat" berada cukup tinggi di Server Settings > Roles agar bisa mengelola role dengan lancar.*'
+                ].join('\n'))
+                .setThumbnail(
+                    client.user.displayAvatarURL({ dynamic: true })
+                )
+                .setFooter({
+                    text: 'Astral Cat Community Bot • Siap di Setiap Server'
+                })
+                .setTimestamp();
+
+            await channel.send({ embeds: [embed] }).catch(() => {});
+        } catch (error) {
+            console.error('Error saat bot masuk ke server baru:', error);
         }
     }
 );
