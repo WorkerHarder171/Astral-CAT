@@ -49,6 +49,12 @@ async function fetchBotStatus() {
             botAvatarEl.src = data.botUser.avatar;
         }
 
+        if (data.inviteUrl) {
+            document.querySelectorAll('.btn-invite-bot').forEach(el => {
+                el.href = data.inviteUrl;
+            });
+        }
+
         return data;
     } catch (err) {
         console.warn('Gagal memuat status bot:', err);

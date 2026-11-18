@@ -51,6 +51,9 @@ app.get('/api/status', (req, res) => {
         };
     }
 
+    const clientId = botUser ? botUser.id : (process.env.DISCORD_CLIENT_ID || '1550009663272128512');
+    const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`;
+
     res.json({
         online: isOnline,
         uptime: Math.floor(process.uptime()),
@@ -58,8 +61,16 @@ app.get('/api/status', (req, res) => {
         guildCount,
         userCount,
         botUser,
+        inviteUrl,
         prefix: process.env.PREFIX || '!'
     });
+});
+
+// API: Direct Invite Bot Link
+app.get('/api/invite', (req, res) => {
+    const clientId = (discordClient && discordClient.user) ? discordClient.user.id : (process.env.DISCORD_CLIENT_ID || '1550009663272128512');
+    const inviteUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&permissions=8&scope=bot%20applications.commands`;
+    res.json({ success: true, clientId, inviteUrl });
 });
 
 // API: Get Current Config

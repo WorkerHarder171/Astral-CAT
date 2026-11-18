@@ -67,6 +67,57 @@ module.exports = async (client, interaction) => {
     if (interaction.isButton()) {
         const { customId } = interaction;
 
+        // Handler Onboarding Quick Action Buttons
+        if (customId.startsWith('quick_setup_role:')) {
+            const [, gId] = customId.split(':');
+            const g = client.guilds.cache.get(gId) || interaction.guild;
+            if (
+                !interaction.member.permissions.has('ManageRoles') &&
+                !interaction.member.permissions.has('Administrator')
+            ) {
+                return interaction.reply({
+                    content: '❌ Anda membutuhkan izin **Manage Roles** atau **Administrator** untuk memasang panel role!',
+                    ephemeral: true
+                });
+            }
+            const { createRolePanel } = require('../commands/claim-role');
+            const panel = await createRolePanel(g);
+            await interaction.channel.send(panel);
+            return interaction.reply({
+                content: `✅ Panel role gender berhasil dipasang di channel ini (<#${interaction.channel.id}>)!`,
+                ephemeral: true
+            });
+        }
+
+        if (customId.startsWith('quick_test_welcome:')) {
+            await interaction.deferReply({ ephemeral: true });
+            const welcomeModule = require('../welcome');
+            const card = await welcomeModule.generateWelcomeCard(interaction.member);
+            return interaction.editReply({
+                content: `🎉 Halo <@${interaction.user.id}>, berikut adalah pratinjau kartu sambutan:`,
+                files: [card]
+            });
+        }
+
+        if (customId.startsWith('quick_help:')) {
+            const prefix = process.env.PREFIX || '!';
+            const { EmbedBuilder } = require('discord.js');
+            const helpEmbed = new EmbedBuilder()
+                .setColor(0x7C3AED)
+                .setTitle('📖 Buku Panduan Singkat Astral Cat')
+                .setDescription([
+                    `Prefix Server: **\`${prefix}\`** atau gunakan **Slash Commands (\`/\`)**`,
+                    '',
+                    '• 🎵 **Musik:** `!play <lagu>` atau `/play`',
+                    '• 🚻 **Panel Role:** `!setup-role` atau `/setup-role`',
+                    '• 🎨 **Kartu Sambutan:** `!setup-welcome` atau `/setup-welcome`',
+                    '• 📢 **Pengumuman:** `!announce` atau `/announce`',
+                    '• 🏓 **Cek Ping:** `!ping` atau `/ping`'
+                ].join('\n'))
+                .setFooter({ text: interaction.guild.name });
+            return interaction.reply({ embeds: [helpEmbed], ephemeral: true });
+        }
+
         if (
             !customId.startsWith('claim_gender_man:') &&
             !customId.startsWith('claim_gender_woman:')
