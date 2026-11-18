@@ -331,10 +331,15 @@ function startWebServer(client) {
 
     server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            console.warn(`⚠️  Port ${port} sedang digunakan. Mencoba port ${port + 1}...`);
-            app.listen(port + 1, () => {
-                console.log(`🌐 Dashboard Website aktif di: http://localhost:${port + 1}`);
-            });
+            console.error('========================================');
+            console.error(`⚠️  PERINGATAN: Bot Astral Cat sudah berjalan di background (PM2/Port ${port})!`);
+            console.error('👉 Proses ini dihentikan otomatis agar bot tidak merespon ganda (redundant/duplikat).');
+            console.error('💡 Gunakan perintah: `npx pm2 logs` atau `npx pm2 restart astral-cat`');
+            console.error('========================================');
+            if (discordClient) {
+                try { discordClient.destroy(); } catch (_) {}
+            }
+            process.exit(0);
         } else {
             console.error('❌ Web server error:', err);
         }
