@@ -130,10 +130,15 @@ async function handleGuildMemberAdd(member) {
 
     /*
     |--------------------------------------------------------------------------
-    | 2. GENDER SELECTION ONBOARDING DM
+    | 2. GENDER SELECTION ONBOARDING DM (ANTI-REDUNDANSI)
     |--------------------------------------------------------------------------
     */
-    await sendRoleDm(member);
+    const dmedUserIds = new Set(settings.dmedUserIds || []);
+    if (!dmedUserIds.has(member.user.id)) {
+        await sendRoleDm(member);
+        dmedUserIds.add(member.user.id);
+        updateGuildSettings(member.guild.id, { dmedUserIds: Array.from(dmedUserIds) });
+    }
 }
 
 module.exports = handleGuildMemberAdd;

@@ -51,6 +51,10 @@ function findExistingRole(guild, keywords) {
     }) || null;
 }
 
+// Kunci konkurensi: mencegah auto-setup berjalan dua kali secara paralel di server yang sama
+const activeSetups = new Set();
+const activeJoinSetups = new Set();
+
 /**
  * Menjalankan auto-setup seluruh channel dan role yang dibutuhkan Astral Cat
  * @param {import('discord.js').Guild} guild
@@ -59,8 +63,18 @@ function findExistingRole(guild, keywords) {
  * @returns {Promise<EmbedBuilder>}
  */
 async function executeAutoSetup(guild, executorMember, force = false) {
-    const botMember = guild.members.me;
-    const currentSettings = getGuildSettings(guild.id);
+    if (activeSetups.has(guild.id)) {
+        return new EmbedBuilder()
+            .setColor(0xFEE75C)
+            .setTitle('⏳ Auto-Setup Sedang Berjalan')
+            .setDescription('Proses konfigurasi sedang berlangsung di server ini. Harap tunggu hingga selesai untuk mencegah redundansi.');
+    }
+
+    activeSetups.add(guild.id);
+
+    try {
+        const botMember = guild.members.me;
+        const currentSettings = getGuildSettings(guild.id);
 
     // Cek keberadaan channel yang sudah dikonfigurasi
     const hasBot = Boolean(currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId));
@@ -526,13 +540,23 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         .setTimestamp();
 
     return reportEmbed;
+    } finally {
+        activeSetups.delete(guild.id);
+    }
 }
 
 /**
- * Jalankan setup otomatis saat bot pertama kali masuk ke server baru
+ * Jalankan setup otomatis saat bot pertama kali masuk ke server baru (Anti-Redundansi Mutex)
  * @param {import('discord.js').Guild} guild
  */
 async function autoSetupOnGuildJoin(guild) {
+    if (activeJoinSetups.has(guild.id)) {
+        console.warn(`[Auto-Join Setup] Setup untuk ${guild.name} sedang berjalan. Permintaan duplikat diabaikan.`);
+        return;
+    }
+
+    activeJoinSetups.add(guild.id);
+
     try {
         const botMember = guild.members.me;
 
@@ -606,6 +630,8 @@ async function autoSetupOnGuildJoin(guild) {
         console.log(`🎉 [Auto-Join Setup] Berhasil mengonfigurasi server: ${guild.name}`);
     } catch (error) {
         console.error(`❌ [Auto-Join Setup] Gagal mengonfigurasi ${guild.name}:`, error);
+    } finally {
+        activeJoinSetups.delete(guild.id);
     }
 }
 
