@@ -5,11 +5,12 @@ async function handleUtilityCommands(message, command, client, PREFIX) {
         const helpEmbed = new EmbedBuilder()
             .setColor(0x5865F2)
             .setTitle('🤖 Panduan Perintah Bot')
-            .setDescription(`Gunakan awalan \`${PREFIX}\` di awal setiap perintah:\n`)
+            .setDescription(`Gunakan awalan \`${PREFIX}\` atau gunakan **Slash Commands (\`/\`)**:\n`)
             .addFields(
-                { name: '🚻 Claim Role Gender', value: '`!setup-role [#channel]`' },
-                { name: '📢 Pengumuman (Admin)', value: '`!announce <#channel> [Judul |] <Pesan>`\n`!announce-all <#channel> [Judul |] <Pesan>`' },
-                { name: '🎵 Musik', value: '`!play`, `!skip`, `!pause`, `!resume`, `!stop`, `!queue`, `!np`' },
+                { name: '⚡ Auto-Setup Server (1-Klik)', value: '`!auto-setup` atau `/auto-setup` *(Otomatis membuat role Men & Women, channel sambutan, pengumuman, dan panel role)*' },
+                { name: '🚻 Claim Role Gender', value: '`!setup-role [#channel]` atau `/setup-role`' },
+                { name: '📢 Pengumuman (Admin)', value: '`!announce [#channel]` atau `/announce`' },
+                { name: '🎵 Musik', value: '`!play <lagu>`, `!skip`, `!pause`, `!resume`, `!stop`, `!queue`, `!np`' },
                 { name: '👋 Sambutan', value: '`!test-welcome`, `!setup-welcome <#channel>`' },
                 { name: '⚙️ Umum', value: '`!help`, `!ping`' }
             )

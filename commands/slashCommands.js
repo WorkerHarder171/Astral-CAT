@@ -80,6 +80,11 @@ const commandsData = [
         ),
 
     new SlashCommandBuilder()
+        .setName('auto-setup')
+        .setDescription('Konfigurasi otomatis: buat role gender, channel sambutan, panel role, & pengumuman')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+
+    new SlashCommandBuilder()
         .setName('test-welcome')
         .setDescription('Uji coba render kartu sambutan kanvas untuk profilmu'),
 
@@ -315,6 +320,18 @@ async function handleSlashCommand(client, interaction) {
                 content: `🎉 Halo <@${interaction.user.id}>, berikut adalah pratinjau kartu sambutan **${interaction.guild.name}**:`,
                 files: [card]
             });
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | AUTO-SETUP
+        |--------------------------------------------------------------------------
+        */
+        if (commandName === 'auto-setup') {
+            await interaction.deferReply();
+            const { executeAutoSetup } = require('./auto-setup');
+            const resultEmbed = await executeAutoSetup(interaction.guild, interaction.member);
+            return interaction.editReply({ embeds: [resultEmbed] });
         }
 
         /*

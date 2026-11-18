@@ -109,6 +109,26 @@ client.on(
         try {
             /*
             |--------------------------------------------------------------------------
+            | AUTO-SETUP COMMAND (1-KLIK ZERO CONFIG)
+            |--------------------------------------------------------------------------
+            */
+
+            if (
+                [
+                    'auto-setup',
+                    'autosetup',
+                    'setup-all',
+                    'setup-server',
+                    'auto-config'
+                ].includes(command)
+            ) {
+                const { handleAutoSetupCommand } = require('./commands/auto-setup');
+                await handleAutoSetupCommand(message);
+                return;
+            }
+
+            /*
+            |--------------------------------------------------------------------------
             | ROLE COMMAND
             |--------------------------------------------------------------------------
             */

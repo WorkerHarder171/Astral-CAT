@@ -180,8 +180,14 @@ async function autoInitializeGuild(guild, { sendGreeting = true } = {}) {
 
                 const actionRow = new ActionRowBuilder().addComponents(
                     new ButtonBuilder()
+                        .setCustomId(`quick_auto_setup:${guild.id}`)
+                        .setLabel('Auto-Setup Server (1-Klik)')
+                        .setEmoji('⚡')
+                        .setStyle(ButtonStyle.Success),
+
+                    new ButtonBuilder()
                         .setCustomId(`quick_setup_role:${guild.id}`)
-                        .setLabel('Pasang Panel Role di Sini')
+                        .setLabel('Pasang Panel Role')
                         .setEmoji('🚻')
                         .setStyle(ButtonStyle.Primary),
 
@@ -189,7 +195,7 @@ async function autoInitializeGuild(guild, { sendGreeting = true } = {}) {
                         .setCustomId(`quick_test_welcome:${guild.id}`)
                         .setLabel('Tes Welcome Card')
                         .setEmoji('🎨')
-                        .setStyle(ButtonStyle.Success),
+                        .setStyle(ButtonStyle.Secondary),
 
                     new ButtonBuilder()
                         .setCustomId(`quick_help:${guild.id}`)

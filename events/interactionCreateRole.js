@@ -68,6 +68,24 @@ module.exports = async (client, interaction) => {
         const { customId } = interaction;
 
         // Handler Onboarding Quick Action Buttons
+        if (customId.startsWith('quick_auto_setup:')) {
+            const [, gId] = customId.split(':');
+            const g = client.guilds.cache.get(gId) || interaction.guild;
+            if (
+                !interaction.member.permissions.has('ManageGuild') &&
+                !interaction.member.permissions.has('Administrator')
+            ) {
+                return interaction.reply({
+                    content: '❌ Anda membutuhkan izin **Manage Server** atau **Administrator** untuk menjalankan auto-setup!',
+                    ephemeral: true
+                });
+            }
+            await interaction.deferReply();
+            const { executeAutoSetup } = require('../commands/auto-setup');
+            const resultEmbed = await executeAutoSetup(g, interaction.member);
+            return interaction.editReply({ embeds: [resultEmbed] });
+        }
+
         if (customId.startsWith('quick_setup_role:')) {
             const [, gId] = customId.split(':');
             const g = client.guilds.cache.get(gId) || interaction.guild;

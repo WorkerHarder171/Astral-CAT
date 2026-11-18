@@ -196,6 +196,13 @@ app.get('/api/commands', (req, res) => {
     const prefix = process.env.PREFIX || '!';
     const commands = [
         {
+            category: 'Utilitas & Setup',
+            name: `${prefix}auto-setup`,
+            aliases: [`${prefix}autosetup`, `${prefix}setup-all`, `/auto-setup`],
+            description: 'Konfigurasi server otomatis 1-klik: membuat role Men & Women, channel sambutan, panel role, dan pengumuman.',
+            usage: `${prefix}auto-setup`
+        },
+        {
             category: 'Musik',
             name: `${prefix}play <judul / URL>`,
             aliases: [`${prefix}p`],
