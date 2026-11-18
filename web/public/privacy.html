@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kebijakan Privasi — Astral Cat Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="selection:bg-violet-600 selection:text-white">
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/70 border-b border-white/10 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3 group">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-sky-400 p-0.5 shadow-lg shadow-violet-500/20 group-hover:scale-105 transition-transform">
+                    <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center text-xl">
+                        🐾
+                    </div>
+                </div>
+                <div>
+                    <span class="font-heading font-bold text-xl tracking-wide text-white group-hover:text-violet-300 transition-colors">Astral Cat</span>
+                    <span class="block text-[10px] font-mono uppercase tracking-widest text-violet-400">Legal & Privacy Center</span>
+                </div>
+            </a>
+
+            <div class="flex items-center gap-4 text-sm font-medium">
+                <a href="/" class="text-slate-400 hover:text-white transition-colors">← Beranda</a>
+                <a href="/settings" class="text-slate-400 hover:text-white transition-colors">Pengaturan</a>
+                <a href="/terms" class="text-slate-400 hover:text-white transition-colors">Ketentuan Layanan</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="max-w-4xl mx-auto px-6 pt-16 pb-12 text-center">
+        <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-violet-950/60 border border-violet-500/30 text-violet-300 text-xs font-semibold uppercase tracking-wider mb-4">
+            🛡️ Kebijakan Privasi & Perlindungan Data
+        </div>
+        <h1 class="font-heading text-4xl sm:text-5xl font-extrabold text-white mb-4">
+            Kebijakan Privasi Astral Cat
+        </h1>
+        <p class="text-slate-400 text-sm sm:text-base">
+            Terakhir Diperbarui: <strong>18 November 2026</strong> • Berlaku untuk semua pengguna dan server Discord yang menggunakan Astral Cat.
+        </p>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-6 pb-24 text-slate-300 leading-relaxed text-sm sm:text-base space-y-10">
+        <!-- Ringkasan Singkat -->
+        <div class="glass-panel p-6 border-l-4 border-l-violet-500 bg-violet-950/20">
+            <h3 class="font-heading font-bold text-lg text-white mb-2">📌 Ringkasan Komitmen Privasi Kami</h3>
+            <p class="text-slate-300 text-sm">
+                Astral Cat diciptakan untuk menyediakan utilitas komunitas, musik, kartu sambutan, dan pengaturan server Discord. 
+                <strong>Kami TIDAK PERNAH membaca, merekam, atau menyimpan percakapan obrolan pribadi Anda (chat logging).</strong> 
+                Kami tidak menjual data Anda kepada pihak mana pun, dan hanya memproses data teknis yang mutlak diperlukan untuk fungsionalitas bot.
+            </p>
+        </div>
+
+        <!-- 1. Data yang Dikumpulkan -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-violet-600/20 text-violet-400 flex items-center justify-center text-sm font-mono">01</span>
+                Informasi & Data yang Kami Kumpulkan
+            </h2>
+            <p>
+                Ketika Anda atau administrator mengundang dan berinteraksi dengan Astral Cat di server Discord, bot dapat menerima data berikut langsung melalui Discord API:
+            </p>
+            <ul class="list-disc pl-6 space-y-2 text-slate-300 text-sm">
+                <li>
+                    <strong>Pengenal Unik Discord (Snowflake IDs):</strong> Discord User ID, Server (Guild) ID, Channel ID, dan Role ID untuk memvalidasi izin, mengarahkan tujuan pesan pengumuman, dan memberikan role gender yang dipilih.
+                </li>
+                <li>
+                    <strong>Informasi Profil Publik:</strong> Username, Discriminator/Tag, dan URL foto profil (Avatar) publik dari pengguna. Informasi ini hanya digunakan secara sementara pada memori mesin untuk merender kartu selamat datang (Welcome Card Canvas).
+                </li>
+                <li>
+                    <strong>Status Voice Channel (Voice States):</strong> ID voice channel dan status sambungan pengguna ketika menggunakan perintah musik (seperti <code class="bg-slate-900 px-1.5 py-0.5 rounded text-violet-300">!play</code> atau <code class="bg-slate-900 px-1.5 py-0.5 rounded text-violet-300">!stop</code>).
+                </li>
+                <li>
+                    <strong>Input Perintah & Interaksi:</strong> Pesan yang diawali dengan prefix bot (misal: <code class="bg-slate-900 px-1.5 py-0.5 rounded text-violet-300">!</code>) atau klik tombol/modal interaksi untuk menjalankan aksi yang diminta.
+                </li>
+            </ul>
+        </section>
+
+        <!-- 2. Data yang TIDAK Dikumpulkan -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-pink-600/20 text-pink-400 flex items-center justify-center text-sm font-mono">02</span>
+                Data yang TIDAK Pernah Kami Kumpulkan
+            </h2>
+            <div class="glass-panel p-5 bg-rose-950/10 border-rose-500/20 text-sm text-slate-300 space-y-2">
+                <p>Untuk menghindari keraguan, Astral Cat <strong>TIDAK PERNAH:</strong></p>
+                <ul class="list-disc pl-5 space-y-1 text-slate-400">
+                    <li>Merekam atau menyimpan isi pesan teks umum yang tidak ditujukan sebagai perintah bot.</li>
+                    <li>Mengumpulkan kata sandi (password), informasi penagihan/finansial, atau identitas nyata di dunia nyata.</li>
+                    <li>Merekam atau menyimpan data audio mikrofon pengguna di Voice Channel.</li>
+                    <li>Mengakses atau mengintip Direct Messages (DM) pribadi pengguna di luar tombol verifikasi gender yang diminta.</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 3. Bagaimana Data Digunakan -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-sky-600/20 text-sky-400 flex items-center justify-center text-sm font-mono">03</span>
+                Tujuan Penggunaan Data
+            </h2>
+            <p>Data yang diterima hanya digunakan untuk tujuan fungsionalitas murni:</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div class="glass-panel p-4">
+                    <h4 class="font-bold text-white mb-1">Pemutar Musik</h4>
+                    <p class="text-slate-400 text-xs">Menyambungkan bot ke voice channel pengguna dan mengelola antrean lagu.</p>
+                </div>
+                <div class="glass-panel p-4">
+                    <h4 class="font-bold text-white mb-1">Kartu Sambutan Dinamis</h4>
+                    <p class="text-slate-400 text-xs">Menggambar avatar dan nama member baru di atas banner ucapan selamat datang.</p>
+                </div>
+                <div class="glass-panel p-4">
+                    <h4 class="font-bold text-white mb-1">Pemberian Role Gender</h4>
+                    <p class="text-slate-400 text-xs">Menambahkan role Man/Woman pada profil anggota saat tombol diklik.</p>
+                </div>
+                <div class="glass-panel p-4">
+                    <h4 class="font-bold text-white mb-1">Penerbitan Pengumuman</h4>
+                    <p class="text-slate-400 text-xs">Mengirimkan pesan berformat embed ke channel yang telah ditentukan admin.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Penyimpanan & Retensi Data -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-amber-600/20 text-amber-400 flex items-center justify-center text-sm font-mono">04</span>
+                Penyimpanan & Retensi Data
+            </h2>
+            <p>
+                Astral Cat tidak menggunakan database cloud eksternal pihak ketiga untuk melacak aktivitas pengguna.
+            </p>
+            <ul class="list-disc pl-6 space-y-2 text-slate-300 text-sm">
+                <li>
+                    <strong>Konfigurasi Server:</strong> ID channel sambutan, ID channel pengumuman, dan ID role disimpan secara lokal dalam file konfigurasi lingkungan (<code class="font-mono text-violet-300">.env</code>) pada host server bot.
+                </li>
+                <li>
+                    <strong>Antrean Musik (Queue):</strong> Disimpan hanya di RAM (memori sementara) selama bot aktif. Antrean lagu akan otomatis terhapus secara permanen saat pemutaran selesai atau bot meninggalkan voice channel.
+                </li>
+            </ul>
+        </section>
+
+        <!-- 5. Layanan Pihak Ketiga -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center text-sm font-mono">05</span>
+                Integrasi Layanan Pihak Ketiga
+            </h2>
+            <p>
+                Astral Cat berinteraksi dengan beberapa antarmuka pemrograman aplikasi (API) pihak ketiga yang memiliki kebijakan privasi masing-masing:
+            </p>
+            <ul class="list-disc pl-6 space-y-2 text-slate-300 text-sm">
+                <li><a href="https://discord.com/privacy" target="_blank" rel="noopener noreferrer" class="text-violet-400 underline hover:text-violet-300">Discord API (Discord Inc.)</a> — Sebagai platform operasional utama bot.</li>
+                <li><a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" class="text-violet-400 underline hover:text-violet-300">YouTube / Google LLC</a> — Untuk mengekstrak streaming audio lagu bebas hak cipta atau publik.</li>
+                <li><a href="https://www.spotify.com/id/legal/privacy-policy/" target="_blank" rel="noopener noreferrer" class="text-violet-400 underline hover:text-violet-300">Spotify Web API</a> — Untuk membaca metadata judul lagu dan daftar putar yang dicari pengguna.</li>
+            </ul>
+        </section>
+
+        <!-- 6. Hak Pengguna & Penghapusan Data -->
+        <section class="space-y-4">
+            <h2 class="font-heading text-2xl font-bold text-white flex items-center gap-3">
+                <span class="w-8 h-8 rounded-lg bg-indigo-600/20 text-indigo-400 flex items-center justify-center text-sm font-mono">06</span>
+                Hak Pengguna & Permintaan Penghapusan Data
+            </h2>
+            <p>
+                Sesuai dengan regulasi privasi global dan Discord Developer Policy:
+            </p>
+            <ul class="list-disc pl-6 space-y-2 text-slate-300 text-sm">
+                <li>
+                    <strong>Penghentian Layanan:</strong> Administrator server dapat mengeluarkan (kick) atau memblokir (ban) bot dari server mereka kapan saja untuk menghentikan pemrosesan data secara instan.
+                </li>
+                <li>
+                    <strong>Penghapusan Konfigurasi:</strong> Anda dapat menghapus channel atau ID konfigurasi server melalui <a href="/settings" class="text-violet-400 underline">Dashboard Pengaturan</a>.
+                </li>
+            </ul>
+        </section>
+
+        <!-- 7. Kontak Pengembang -->
+        <section class="glass-panel p-6 border border-white/10 space-y-3">
+            <h2 class="font-heading text-xl font-bold text-white">Hubungi Kami</h2>
+            <p class="text-sm text-slate-400">
+                Jika Anda memiliki pertanyaan, saran, atau permintaan terkait privasi dan perlindungan data bot Astral Cat, silakan hubungi pengembang melalui repositori resmi atau kontak server komunitas.
+            </p>
+            <div class="pt-2">
+                <a href="/" class="btn-cosmic text-xs">
+                    <span>🐾</span> Kembali ke Beranda Astral Cat
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 bg-slate-950/80 px-6 py-8 text-center text-xs text-slate-500">
+        Astral Cat Privacy Policy • Sesuai dengan Panduan Pengembang Discord
+    </footer>
+</body>
+</html>

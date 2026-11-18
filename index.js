@@ -25,7 +25,9 @@ const handleInteractionAnnouncement =
 const handleGuildMemberAdd =
     require('./events/guildMemberAdd');
 
-const PREFIX = '!';
+const { startWebServer } = require('./web/server');
+
+const getPrefix = () => process.env.PREFIX || '!';
 
 let welcomeChannelId =
     process.env.WELCOME_CHANNEL_ID?.trim() || '';
@@ -50,7 +52,7 @@ client.once(Events.ClientReady, () => {
     console.log('========================================');
     console.log(`🤖 Bot ${client.user.tag} online!`);
     console.log(
-        `⚡ Siap menerima perintah dengan prefix: "${PREFIX}"`
+        `⚡ Siap menerima perintah dengan prefix: "${getPrefix()}"`
     );
     console.log('========================================');
 });
@@ -64,16 +66,17 @@ client.once(Events.ClientReady, () => {
 client.on(
     Events.MessageCreate,
     async (message) => {
+        const prefix = getPrefix();
         if (
             message.author.bot ||
             !message.guild ||
-            !message.content.startsWith(PREFIX)
+            !message.content.startsWith(prefix)
         ) {
             return;
         }
 
         const args = message.content
-            .slice(PREFIX.length)
+            .slice(prefix.length)
             .trim()
             .split(/\s+/);
 
@@ -201,7 +204,7 @@ client.on(
                     message,
                     command,
                     client,
-                    PREFIX
+                    prefix
                 );
 
                 return;
@@ -312,18 +315,20 @@ client.on(
 
 /*
 |--------------------------------------------------------------------------
-| LOGIN
+| WEB DASHBOARD & LOGIN
 |--------------------------------------------------------------------------
 */
 
+// Memulai Web Dashboard & API Server
+startWebServer(client);
+
+// Login ke Discord Gateway
 if (!process.env.DISCORD_TOKEN) {
-    console.error(
-        '❌ DISCORD_TOKEN belum dikonfigurasi di .env'
-    );
-
-    process.exit(1);
+    console.warn('⚠️  DISCORD_TOKEN belum dikonfigurasi di .env.');
+    console.log('👉 Buka dashboard di http://localhost:3000/settings untuk memasukkan token bot.');
+} else {
+    client.login(process.env.DISCORD_TOKEN).catch((err) => {
+        console.error('❌ Gagal login ke Discord:', err.message);
+        console.log('👉 Masukkan token baru di dashboard: http://localhost:3000/settings');
+    });
 }
-
-client.login(
-    process.env.DISCORD_TOKEN
-);

@@ -238,15 +238,29 @@ function isPlayerActive(guildId) {
 }
 
 function cleanupProcesses(guildId) {
-    const process = processesMap.get(guildId);
+    const target = processesMap.get(guildId);
 
-    if (!process) {
+    if (!target) {
         return;
     }
 
     try {
-        if (!process.killed) {
-            process.kill('SIGKILL');
+        if (typeof target.cleanup === 'function') {
+            target.cleanup();
+        } else if (Array.isArray(target)) {
+            for (const proc of target) {
+                if (proc && !proc.killed) {
+                    try {
+                        proc.kill();
+                    } catch {}
+                }
+            }
+        } else if (target && typeof target.kill === 'function') {
+            if (!target.killed) {
+                try {
+                    target.kill();
+                } catch {}
+            }
         }
     } catch {}
 
@@ -346,50 +360,20 @@ async function playSong(
         );
     }
 
-    const audio =
-        await yt.getAudioStream(
-            playbackUrl
-        );
+    const audio = yt.createAudioStream(playbackUrl);
 
-    let resource;
+    processesMap.set(
+        guildId,
+        audio
+    );
 
-    if (audio.type === 'opus') {
-        const stream =
-            await yt.createHttpStream(
-                audio.url
-            );
-
-        resource = createAudioResource(
-            stream,
-            {
-                inputType:
-                    StreamType.WebmOpus
-            }
-        );
-    } else {
-        const inputStream =
-            await yt.createHttpStream(
-                audio.url
-            );
-
-        const ffmpeg =
-            yt.createFFmpegStream(
-                inputStream
-            );
-
-        processesMap.set(
-            guildId,
-            ffmpeg
-        );
-
-        resource = createAudioResource(
-            ffmpeg.stdout,
-            {
-                inputType:
-                    StreamType.Raw
-            }
-        );
-    }
+    const resource = createAudioResource(
+        audio.stream,
+        {
+            inputType:
+                StreamType.Raw
+        }
+    );
 
     currentSongs.set(
         guildId,
@@ -900,5 +884,6 @@ module.exports = {
     nowPlaying,
     resolveSong,
     searchYoutube: yt.searchYoutube,
+    createAudioStream: yt.createAudioStream,
     getAudioStream: yt.getAudioStream
 };

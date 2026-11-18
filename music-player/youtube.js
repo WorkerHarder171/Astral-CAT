@@ -21,7 +21,7 @@ function isYoutubeUrl(value) {
     }
 }
 
-function createHttpStream(url, redirectCount = 0) {
+function createHttpStream(url, redirectCount = 0, customHeaders = {}) {
     if (redirectCount > 5) {
         return Promise.reject(new Error('Terlalu banyak redirect audio URL.'));
     }
@@ -33,7 +33,12 @@ function createHttpStream(url, redirectCount = 0) {
             url,
             {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0'
+                    'User-Agent':
+                        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
+                    Accept: '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    Range: 'bytes=0-',
+                    ...customHeaders
                 }
             },
             response => {
@@ -50,14 +55,14 @@ function createHttpStream(url, redirectCount = 0) {
                         url
                     ).toString();
 
-                    createHttpStream(nextUrl, redirectCount + 1)
+                    createHttpStream(nextUrl, redirectCount + 1, customHeaders)
                         .then(resolve)
                         .catch(reject);
 
                     return;
                 }
 
-                if (status !== 200) {
+                if (status !== 200 && status !== 206) {
                     response.resume();
                     reject(
                         new Error(
@@ -114,6 +119,81 @@ function createFFmpegStream(inputStream) {
     return ffmpeg;
 }
 
+function createAudioStream(url) {
+    const ytProcess = ytdlp.exec(
+        url,
+        {
+            output: '-',
+            format: 'bestaudio/best',
+            quiet: true,
+            noWarnings: true,
+            jsRuntimes: 'node',
+            extractorArgs: 'youtube:player_client=android'
+        },
+        {
+            stdio: ['ignore', 'pipe', 'pipe']
+        }
+    );
+
+    const ffmpeg = spawn(
+        ffmpegPath,
+        [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-i',
+            'pipe:0',
+            '-f',
+            's16le',
+            '-ar',
+            '48000',
+            '-ac',
+            '2',
+            'pipe:1'
+        ],
+        {
+            stdio: ['pipe', 'pipe', 'pipe']
+        }
+    );
+
+    ytProcess.stdout.pipe(ffmpeg.stdin);
+
+    ytProcess.catch(() => {});
+
+    ytProcess.on('error', () => {});
+    ytProcess.stdout.on('error', () => {});
+    ffmpeg.stdin.on('error', () => {});
+    ffmpeg.stdout.on('error', () => {});
+    ffmpeg.on('error', () => {});
+
+    ytProcess.stderr.on('data', data => {
+        const msg = data.toString().trim();
+        if (msg && !msg.includes('JavaScript runtime')) {
+            console.error('[yt-dlp]', msg);
+        }
+    });
+
+    ffmpeg.stderr.on('data', data => {
+        const message = data.toString().trim();
+        if (message) {
+            console.error('[FFmpeg]', message);
+        }
+    });
+
+    return {
+        stream: ffmpeg.stdout,
+        processes: [ytProcess, ffmpeg],
+        cleanup: () => {
+            try {
+                if (!ytProcess.killed) ytProcess.kill();
+            } catch {}
+            try {
+                if (!ffmpeg.killed) ffmpeg.kill();
+            } catch {}
+        }
+    };
+}
+
 async function searchYoutube(query) {
     const result = await ytdlp(
         `ytsearch1:${query}`,
@@ -122,7 +202,8 @@ async function searchYoutube(query) {
             noWarnings: true,
             skipDownload: true,
             flatPlaylist: true,
-            noCallHome: true
+            jsRuntimes: 'node',
+            extractorArgs: 'youtube:player_client=android'
         }
     );
 
@@ -149,7 +230,8 @@ async function getYoutubeInfo(url) {
             dumpSingleJson: true,
             noWarnings: true,
             skipDownload: true,
-            noCallHome: true
+            jsRuntimes: 'node',
+            extractorArgs: 'youtube:player_client=android'
         }
     );
 
@@ -165,73 +247,14 @@ async function getYoutubeInfo(url) {
 }
 
 async function getAudioStream(url) {
-    const info = await ytdlp(
-        url,
-        {
-            dumpSingleJson: true,
-            noWarnings: true,
-            skipDownload: true,
-            noCallHome: true
-        }
-    );
-
-    const formats = Array.isArray(info.formats)
-        ? info.formats
-        : [];
-
-    const audioFormats = formats.filter(format => {
-        return (
-            format.vcodec === 'none' &&
-            format.acodec &&
-            format.url
-        );
-    });
-
-    if (!audioFormats.length) {
-        throw new Error('Audio stream YouTube tidak ditemukan.');
-    }
-
-    const opusFormats = audioFormats.filter(format => {
-        return (
-            String(format.acodec)
-                .toLowerCase()
-                .includes('opus') &&
-            String(format.ext)
-                .toLowerCase() === 'webm'
-        );
-    });
-
-    if (opusFormats.length) {
-        opusFormats.sort(
-            (a, b) =>
-                Number(b.abr || 0) -
-                Number(a.abr || 0)
-        );
-
-        return {
-            type: 'opus',
-            url: opusFormats[0].url,
-            format: opusFormats[0]
-        };
-    }
-
-    audioFormats.sort(
-        (a, b) =>
-            Number(b.abr || 0) -
-            Number(a.abr || 0)
-    );
-
-    return {
-        type: 'ffmpeg',
-        url: audioFormats[0].url,
-        format: audioFormats[0]
-    };
+    return createAudioStream(url);
 }
 
 module.exports = {
     isYoutubeUrl,
     createHttpStream,
     createFFmpegStream,
+    createAudioStream,
     searchYoutube,
     getYoutubeInfo,
     getAudioStream

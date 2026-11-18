@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Astral Cat — Modern Discord Bot & Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="selection:bg-violet-600 selection:text-white">
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/70 border-b border-white/10 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <a href="/" class="flex items-center gap-3 group">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 via-indigo-600 to-sky-400 p-0.5 shadow-lg shadow-violet-500/20 group-hover:scale-105 transition-transform">
+                    <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center text-xl">
+                        🐾
+                    </div>
+                </div>
+                <div>
+                    <span class="font-heading font-bold text-xl tracking-wide text-white group-hover:text-violet-300 transition-colors">Astral Cat</span>
+                    <span class="block text-[10px] font-mono uppercase tracking-widest text-violet-400">Discord Bot & Web Portal</span>
+                </div>
+            </a>
+
+            <!-- Nav Links -->
+            <div class="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+                <a href="/" class="text-violet-400 hover:text-white transition-colors">Beranda</a>
+                <a href="#fitur" class="hover:text-white transition-colors">Fitur</a>
+                <a href="#perintah" class="hover:text-white transition-colors">Perintah</a>
+                <a href="/settings" class="hover:text-white transition-colors flex items-center gap-1.5">
+                    <span>⚙️</span> Pengaturan
+                </a>
+                <a href="/privacy" class="hover:text-white transition-colors">Kebijakan Privasi</a>
+                <a href="/terms" class="hover:text-white transition-colors">Ketentuan Layanan</a>
+            </div>
+
+            <!-- Bot Status Pill -->
+            <div id="bot-status-badge" class="flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-white/10 text-xs font-medium cursor-default">
+                <span class="pulse-dot offline"></span>
+                <span id="bot-status-text" class="text-slate-300">Memeriksa...</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <header class="max-w-7xl mx-auto px-6 pt-16 pb-20 text-center relative">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-violet-950/60 border border-violet-500/30 text-violet-300 text-xs font-semibold uppercase tracking-wider mb-6">
+            <span>✨</span> Next-Gen Discord Community Bot
+        </div>
+        <h1 class="font-heading text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6">
+            Kelola Server Discord dengan <br>
+            <span class="text-gradient">Kekuatan Astral Cat</span>
+        </h1>
+        <p class="max-w-2xl mx-auto text-slate-400 text-base sm:text-lg mb-10 leading-relaxed">
+            Bot Discord serbaguna dengan pemutar musik berkualitas tinggi, kartu sambutan kustom kanvas, sistem verifikasi gender interaktif, dan pembuat pengumuman elegan.
+        </p>
+
+        <!-- CTA Buttons -->
+        <div class="flex flex-wrap items-center justify-center gap-4">
+            <a href="/settings" class="btn-cosmic">
+                <span>⚙️</span>
+                <span>Buka Pengaturan Bot</span>
+            </a>
+            <a href="#perintah" class="btn-secondary">
+                <span>📜</span>
+                <span>Daftar Perintah</span>
+            </a>
+            <a href="/privacy" class="btn-secondary">
+                <span>🛡️</span>
+                <span>Kebijakan Privasi</span>
+            </a>
+        </div>
+
+        <!-- Live Metrics Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-4xl mx-auto mt-16 text-left">
+            <div class="glass-panel p-5">
+                <div class="text-slate-400 text-xs font-mono uppercase tracking-wider mb-1">Server Terhubung</div>
+                <div id="stat-guilds" class="text-3xl font-heading font-bold text-white">0</div>
+                <div class="text-xs text-slate-500 mt-1">Guild aktif</div>
+            </div>
+            <div class="glass-panel p-5">
+                <div class="text-slate-400 text-xs font-mono uppercase tracking-wider mb-1">Total Anggota</div>
+                <div id="stat-users" class="text-3xl font-heading font-bold text-white">0</div>
+                <div class="text-xs text-slate-500 mt-1">Jangkauan komunitas</div>
+            </div>
+            <div class="glass-panel p-5">
+                <div class="text-slate-400 text-xs font-mono uppercase tracking-wider mb-1">Discord Latensi</div>
+                <div id="stat-ping" class="text-3xl font-heading font-bold text-sky-400">—</div>
+                <div class="text-xs text-slate-500 mt-1">WebSocket ping</div>
+            </div>
+            <div class="glass-panel p-5">
+                <div class="text-slate-400 text-xs font-mono uppercase tracking-wider mb-1">Waktu Aktif</div>
+                <div id="stat-uptime" class="text-3xl font-heading font-bold text-violet-400">0 m</div>
+                <div class="text-xs text-slate-500 mt-1">System uptime</div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Features Section -->
+    <section id="fitur" class="max-w-7xl mx-auto px-6 py-16 border-t border-white/5">
+        <div class="text-center max-w-2xl mx-auto mb-14">
+            <h2 class="font-heading text-3xl sm:text-4xl font-bold mb-4">Fitur Unggulan</h2>
+            <p class="text-slate-400 text-sm sm:text-base">Dirancang khusus untuk menghadirkan kenyamanan komunitas server dan kemudahan pengaturan administrator.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Music -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 flex items-center justify-center text-2xl mb-5">
+                    🎵
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Hi-Fi Music Player</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Putar musik tanpa jeda dari YouTube dan Spotify. Dilengkapi fitur antrean interaktif, pencarian lagu cepat, skip, pause, dan kontrol volume.
+                </p>
+                <div class="font-mono text-xs text-violet-400 bg-violet-950/40 px-3 py-1.5 rounded-md inline-block">
+                    !play, !skip, !queue, !np
+                </div>
+            </div>
+
+            <!-- Welcome Canvas -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center text-2xl mb-5">
+                    🎨
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Canvas Welcome Banner</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Pembuatan gambar sambutan otomatis beresolusi tinggi menggunakan teknologi Canvas dengan avatar bundar anggota baru dan nama pengguna tercetak jelas.
+                </p>
+                <div class="font-mono text-xs text-sky-400 bg-sky-950/40 px-3 py-1.5 rounded-md inline-block">
+                    !test-welcome, !setup-welcome
+                </div>
+            </div>
+
+            <!-- Gender Role -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-pink-500/10 border border-pink-500/20 text-pink-400 flex items-center justify-center text-2xl mb-5">
+                    🚻
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Sistem Claim Role Gender</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Kirim pesan sambutan DM otomatis dengan tombol pemilihan role Man (♂️) dan Woman (♀️), serta panel interaktif di channel server.
+                </p>
+                <div class="font-mono text-xs text-pink-400 bg-pink-950/40 px-3 py-1.5 rounded-md inline-block">
+                    !setup-role, auto-DM join
+                </div>
+            </div>
+
+            <!-- Announcement Modal -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center text-2xl mb-5">
+                    📢
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Announcement Builder</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Buat pengumuman rapi menggunakan pop-up modal interaktif Discord dengan template siap pakai: Stream, Maintenance, Event, dan Informasi Umum.
+                </p>
+                <div class="font-mono text-xs text-amber-400 bg-amber-950/40 px-3 py-1.5 rounded-md inline-block">
+                    !announce, !announce-all
+                </div>
+            </div>
+
+            <!-- Web Dashboard -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl mb-5">
+                    ⚙️
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Web Dashboard Pengaturan</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Kelola seluruh konfigurasi bot secara langsung melalui browser web lokal tanpa perlu menyunting file kode secara manual.
+                </p>
+                <div class="font-mono text-xs text-emerald-400 bg-emerald-950/40 px-3 py-1.5 rounded-md inline-block">
+                    http://localhost:3000/settings
+                </div>
+            </div>
+
+            <!-- Utilities -->
+            <div class="glass-panel p-7">
+                <div class="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl mb-5">
+                    ⚡
+                </div>
+                <h3 class="font-heading font-bold text-xl mb-2 text-white">Utilitas & Monitoring</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-4">
+                    Cek kecepatan respon bot dengan sistem perhitungan ping ganda (pesan vs websocket gateway) dan direktori bantuan perintah lengkap.
+                </p>
+                <div class="font-mono text-xs text-indigo-400 bg-indigo-950/40 px-3 py-1.5 rounded-md inline-block">
+                    !ping, !help, !bantuan
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Commands Directory Section -->
+    <section id="perintah" class="max-w-7xl mx-auto px-6 py-16 border-t border-white/5">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+            <div>
+                <h2 class="font-heading text-3xl font-bold mb-2">Daftar Perintah Bot</h2>
+                <p class="text-slate-400 text-sm">Gunakan perintah di bawah ini di server Discord dengan awalan prefix yang telah diatur.</p>
+            </div>
+            
+            <!-- Search & Filter -->
+            <div class="flex items-center gap-3">
+                <input 
+                    type="text" 
+                    id="command-search" 
+                    placeholder="Cari perintah (misal: play, welcome)..." 
+                    class="bg-slate-900 border border-white/10 rounded-lg px-4 py-2 text-sm text-white focus:outline-none focus:border-violet-500 w-full md:w-72"
+                >
+            </div>
+        </div>
+
+        <div id="commands-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Command Cards will be rendered by JS -->
+            <div class="p-8 text-center text-slate-500 col-span-2">Memuat daftar perintah...</div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 bg-slate-950/80 px-6 py-12 mt-20">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-sm text-slate-500">
+            <div class="flex items-center gap-3">
+                <span class="text-xl">🐾</span>
+                <span class="font-bold text-slate-300">Astral Cat Bot</span>
+                <span>• Solusi Komunitas Discord Modern</span>
+            </div>
+            <div class="flex items-center gap-6">
+                <a href="/settings" class="hover:text-white transition-colors">Pengaturan</a>
+                <a href="/privacy" class="hover:text-white transition-colors">Kebijakan Privasi</a>
+                <a href="/terms" class="hover:text-white transition-colors">Ketentuan Layanan</a>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/js/app.js"></script>
+    <script>
+        // Commands Fetch & Filter Logic
+        let allCommands = [];
+
+        async function loadCommands() {
+            try {
+                const res = await fetch('/api/commands');
+                const data = await res.json();
+                allCommands = data.commands || [];
+                renderCommands(allCommands);
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderCommands(commands) {
+            const container = document.getElementById('commands-container');
+            if (!container) return;
+
+            if (commands.length === 0) {
+                container.innerHTML = '<div class="col-span-2 text-center py-10 text-slate-400">Tidak ada perintah yang cocok dengan pencarian.</div>';
+                return;
+            }
+
+            container.innerHTML = commands.map(c => `
+                <div class="glass-panel p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-mono font-bold text-violet-300 text-sm">${c.name}</span>
+                            <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-violet-950 border border-violet-800 text-violet-300">
+                                ${c.category}
+                            </span>
+                        </div>
+                        <p class="text-slate-400 text-xs leading-relaxed mb-3">${c.description}</p>
+                    </div>
+                    <div class="pt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
+                        <span class="font-mono">Contoh: ${c.usage}</span>
+                        ${c.aliases && c.aliases.length > 0 ? `<span class="italic">Alias: ${c.aliases.join(', ')}</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('command-search')?.addEventListener('input', (e) => {
+            const q = e.target.value.toLowerCase().trim();
+            const filtered = allCommands.filter(c => 
+                c.name.toLowerCase().includes(q) || 
+                c.description.toLowerCase().includes(q) ||
+                c.category.toLowerCase().includes(q) ||
+                (c.aliases && c.aliases.some(a => a.toLowerCase().includes(q)))
+            );
+            renderCommands(filtered);
+        });
+
+        loadCommands();
+    </script>
+</body>
+</html>
