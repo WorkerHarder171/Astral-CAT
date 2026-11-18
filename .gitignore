@@ -1,0 +1,19 @@
+# Environment variables (JANGAN DI-COMMIT)
+.env
+.env*.local
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Local runtime data
+.data/
+*.log
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
