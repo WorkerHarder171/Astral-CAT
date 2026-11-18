@@ -123,7 +123,7 @@ client.on(
                 ].includes(command)
             ) {
                 const { handleAutoSetupCommand } = require('./commands/auto-setup');
-                await handleAutoSetupCommand(message);
+                await handleAutoSetupCommand(message, args);
                 return;
             }
 

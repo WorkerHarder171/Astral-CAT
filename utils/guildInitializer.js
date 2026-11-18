@@ -6,6 +6,7 @@ const {
     PermissionFlagsBits
 } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('./guildSettings');
+const { findExistingChannel, findExistingRole } = require('../commands/auto-setup');
 const welcomeModule = require('../welcome');
 
 /**
@@ -33,12 +34,10 @@ async function resolveOrCreateGenderRole(guild, isMan) {
 
     // 3. Cari role yang sudah ada di server berdasarkan nama
     const keywords = isMan
-        ? ['man', 'men', 'male', 'pria', 'laki-laki', 'laki', 'cowok']
+        ? ['man', 'men', 'male', 'pria', 'lakilaki', 'laki', 'cowok']
         : ['woman', 'women', 'female', 'wanita', 'perempuan', 'cewek'];
 
-    let foundRole = guild.roles.cache.find(r =>
-        keywords.some(kw => r.name.toLowerCase().trim() === kw || r.name.toLowerCase().includes(kw))
-    );
+    let foundRole = findExistingRole(guild, keywords);
 
     if (foundRole) {
         if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
@@ -68,7 +67,7 @@ async function resolveOrCreateGenderRole(guild, isMan) {
 }
 
 /**
- * Otomatis mendeteksi channel sambutan terbaik di server
+ * Otomatis mendeteksi channel sambutan terbaik di server (Smart Reuse)
  * @param {import('discord.js').Guild} guild
  * @returns {import('discord.js').TextChannel|null}
  */
@@ -79,10 +78,8 @@ function autoDetectWelcomeChannel(guild) {
         if (ch && ch.isTextBased()) return ch;
     }
 
-    const channelNames = ['welcome', 'selamat-datang', 'sambutan', 'general', 'chat', 'utama', 'lounge'];
-    let target = guild.channels.cache.find(c =>
-        c.isTextBased() && channelNames.some(name => c.name.toLowerCase().includes(name))
-    );
+    const channelNames = ['welcome', 'selamatdatang', 'sambutan', 'welcomer', 'memberbaru', 'general', 'chat', 'utama', 'lounge'];
+    let target = findExistingChannel(guild, channelNames);
 
     if (!target && guild.systemChannel && guild.systemChannel.isTextBased()) {
         target = guild.systemChannel;
@@ -96,7 +93,7 @@ function autoDetectWelcomeChannel(guild) {
 }
 
 /**
- * Otomatis mendeteksi channel pengumuman di server
+ * Otomatis mendeteksi channel pengumuman di server (Smart Reuse)
  * @param {import('discord.js').Guild} guild
  * @returns {import('discord.js').TextChannel|null}
  */
@@ -108,9 +105,7 @@ function autoDetectAnnouncementChannel(guild) {
     }
 
     const channelNames = ['pengumuman', 'announcement', 'announcements', 'info', 'news', 'broadcast'];
-    const target = guild.channels.cache.find(c =>
-        c.isTextBased() && channelNames.some(name => c.name.toLowerCase().includes(name))
-    );
+    const target = findExistingChannel(guild, channelNames);
 
     if (target) {
         updateGuildSettings(guild.id, { announcementChannelId: target.id });
@@ -130,13 +125,19 @@ async function autoInitializeGuild(guild, { sendGreeting = true } = {}) {
         console.log(`⚙️  [Onboarding] Menginisialisasi server: ${guild.name} (${guild.id})...`);
 
         // 1. Pastikan record settings tersimpan
-        getGuildSettings(guild.id);
+        const settings = getGuildSettings(guild.id);
 
-        // 2. Deteksi channel
+        // Jika server ini sudah selesai disetup (One-Time Lock), jangan ulangi pembuatan/greeting
+        if (settings.autoSetupCompleted) {
+            console.log(`🔒 [Onboarding] Server "${guild.name}" sudah pernah disetup sebelumnya (One-Time Lock aktif).`);
+            return;
+        }
+
+        // 2. Deteksi channel secara cerdas (gunakan yang sudah ada, jangan buat dobel)
         const welcomeCh = autoDetectWelcomeChannel(guild);
         const announceCh = autoDetectAnnouncementChannel(guild);
 
-        // 3. Resolusi role gender (Men & Women)
+        // 3. Resolusi role gender (Men & Women) - pakai yang sudah ada jika ada
         await resolveOrCreateGenderRole(guild, true);
         await resolveOrCreateGenderRole(guild, false);
 

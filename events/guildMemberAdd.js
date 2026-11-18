@@ -5,7 +5,8 @@ const {
     ButtonStyle
 } = require('discord.js');
 const welcomeModule = require('../welcome');
-const { getGuildSettings } = require('../utils/guildSettings');
+const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
+const { findExistingChannel } = require('../commands/auto-setup');
 
 module.exports = async (member) => {
     if (member.user.bot) {
@@ -31,12 +32,23 @@ module.exports = async (member) => {
             welcomeChannel = member.guild.channels.cache.get(process.env.WELCOME_CHANNEL_ID.trim());
         }
 
-        // Auto-detect nama channel umum sambutan
+        // Auto-detect nama channel umum sambutan (Smart Reuse)
         if (!welcomeChannel) {
-            const channelNames = ['welcome', 'selamat-datang', 'sambutan', 'general', 'chat', 'utama', 'lounge'];
-            welcomeChannel = member.guild.channels.cache.find(c =>
-                c.isTextBased() && channelNames.some(name => c.name.toLowerCase().includes(name))
-            );
+            welcomeChannel = findExistingChannel(member.guild, [
+                'welcome',
+                'selamatdatang',
+                'sambutan',
+                'welcomer',
+                'memberbaru',
+                'general',
+                'chat',
+                'utama',
+                'lounge'
+            ]);
+
+            if (welcomeChannel) {
+                updateGuildSettings(member.guild.id, { welcomeChannelId: welcomeChannel.id });
+            }
         }
 
         // Fallback terakhir: systemChannel server

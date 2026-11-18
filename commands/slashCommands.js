@@ -81,8 +81,14 @@ const commandsData = [
 
     new SlashCommandBuilder()
         .setName('auto-setup')
-        .setDescription('Konfigurasi otomatis: buat role gender, channel sambutan, panel role, & pengumuman')
-        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
+        .setDescription('Konfigurasi otomatis: mendeteksi channel & role yang ada (Proteksi One-Time)')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addBooleanOption(option =>
+            option
+                .setName('force')
+                .setDescription('Paksa jalankan ulang setup meskipun sudah pernah disetel')
+                .setRequired(false)
+        ),
 
     new SlashCommandBuilder()
         .setName('test-welcome')
@@ -329,8 +335,9 @@ async function handleSlashCommand(client, interaction) {
         */
         if (commandName === 'auto-setup') {
             await interaction.deferReply();
+            const force = interaction.options.getBoolean('force') || false;
             const { executeAutoSetup } = require('./auto-setup');
-            const resultEmbed = await executeAutoSetup(interaction.guild, interaction.member);
+            const resultEmbed = await executeAutoSetup(interaction.guild, interaction.member, force);
             return interaction.editReply({ embeds: [resultEmbed] });
         }
 
