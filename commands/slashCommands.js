@@ -106,6 +106,17 @@ const commandsData = [
         ),
 
     new SlashCommandBuilder()
+        .setName('broadcast-role')
+        .setDescription('Kirim kartu pemilihan role ke DM seluruh anggota lama yang belum memiliki role')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+        .addBooleanOption(option =>
+            option
+                .setName('semua')
+                .setDescription('Kirim ke semua anggota (termasuk yang sudah punya role)')
+                .setRequired(false)
+        ),
+
+    new SlashCommandBuilder()
         .setName('test-welcome')
         .setDescription('Uji coba render kartu sambutan kanvas untuk profilmu'),
 
@@ -314,6 +325,39 @@ async function handleSlashCommand(client, interaction) {
             } else {
                 return interaction.editReply(`❌ Gagal mengirim DM: ${result.reason}`);
             }
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | BROADCAST ROLE (DM SELURUH ANGGOTA LAMA)
+        |--------------------------------------------------------------------------
+        */
+        if (commandName === 'broadcast-role') {
+            await interaction.deferReply();
+            const forceAll = interaction.options.getBoolean('semua') || false;
+            const { broadcastRoleDmToExistingMembers } = require('./broadcast-role');
+
+            const stats = await broadcastRoleDmToExistingMembers(interaction.guild, { forceAll });
+
+            const reportEmbed = new EmbedBuilder()
+                .setColor(0x57F287)
+                .setTitle('📨 Broadcast Pemilihan Role Selesai!')
+                .setDescription([
+                    `Pengiriman kartu pemilihan role ke DM anggota di **${interaction.guild.name}** telah selesai.`,
+                    '',
+                    '### 📊 Rincian Hasil:',
+                    `• 👥 **Total Anggota (Non-Bot):** ${stats.humanMembers} orang`,
+                    `• 🎯 **Target Anggota:** ${stats.targetedMembers} orang`,
+                    `• ✅ **Berhasil Terkirim ke DM:** ${stats.sentCount} orang`,
+                    `• 🔒 **DM Tertutup (Privacy Settings):** ${stats.closedCount} orang`,
+                    `• ⏭️ **Sudah Memiliki Role (Dilewati):** ${stats.alreadyHadRoleCount} orang`,
+                    '',
+                    '✨ *Anggota yang menerima DM bisa langsung menekan tombol Men ♂️ / Women ♀️ di DM mereka!*'
+                ].join('\n'))
+                .setFooter({ text: `Broadcast dieksekusi oleh ${interaction.user.tag}` })
+                .setTimestamp();
+
+            return interaction.editReply({ embeds: [reportEmbed] });
         }
 
         /*

@@ -163,6 +163,20 @@ client.on(
                 return;
             }
 
+            if (
+                [
+                    'broadcast-role',
+                    'blast-role',
+                    'dm-all',
+                    'dm-members',
+                    'kirim-role-semua'
+                ].includes(command)
+            ) {
+                const { handleBroadcastRoleCommand } = require('./commands/broadcast-role');
+                await handleBroadcastRoleCommand(message, args);
+                return;
+            }
+
             /*
             |--------------------------------------------------------------------------
             | ANNOUNCEMENT COMMAND
