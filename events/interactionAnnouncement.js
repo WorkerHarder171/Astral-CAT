@@ -23,6 +23,7 @@ async function handleInteraction(client, interaction) {
 
             const templateName = parts[1];
             const mode = parts[2];
+            const channelId = parts[3] || '';
 
             const template =
                 announcementTemplates[templateName];
@@ -37,7 +38,7 @@ async function handleInteraction(client, interaction) {
 
             const modal = new ModalBuilder()
                 .setCustomId(
-                    `announcement_modal:${templateName}:${mode}`
+                    `announcement_modal:${templateName}:${mode}:${channelId}`
                 )
                 .setTitle(
                     `${template.emoji} ${template.label}`
@@ -154,26 +155,33 @@ async function handleInteraction(client, interaction) {
                     'announcement_closure'
                 );
 
-            const channelId =
-                process.env.ANNOUNCEMENT_CHANNEL_ID?.trim();
+            const channelId = parts[3];
+            let targetChannel = null;
 
-            if (!channelId) {
-                return interaction.reply({
-                    content:
-                        '❌ `ANNOUNCEMENT_CHANNEL_ID` belum dikonfigurasi.',
-                    flags: MessageFlags.Ephemeral
-                });
+            if (channelId) {
+                targetChannel = interaction.guild.channels.cache.get(channelId);
             }
 
-            const targetChannel =
-                interaction.guild.channels.cache.get(
-                    channelId
-                );
+            if (!targetChannel) {
+                const { getGuildSettings } = require('../utils/guildSettings');
+                const gSettings = getGuildSettings(interaction.guild.id);
+                if (gSettings.announcementChannelId) {
+                    targetChannel = interaction.guild.channels.cache.get(gSettings.announcementChannelId);
+                }
+            }
+
+            if (!targetChannel && process.env.ANNOUNCEMENT_CHANNEL_ID) {
+                targetChannel = interaction.guild.channels.cache.get(process.env.ANNOUNCEMENT_CHANNEL_ID.trim());
+            }
 
             if (!targetChannel) {
+                targetChannel = interaction.channel;
+            }
+
+            if (!targetChannel || !targetChannel.isTextBased()) {
                 return interaction.reply({
                     content:
-                        '❌ Channel pengumuman tidak ditemukan.',
+                        '❌ Channel pengumuman tidak ditemukan atau bukan channel teks.',
                     flags: MessageFlags.Ephemeral
                 });
             }

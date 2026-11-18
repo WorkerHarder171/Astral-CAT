@@ -5,6 +5,7 @@ const {
     ButtonBuilder,
     ButtonStyle
 } = require('discord.js');
+const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
 
 const ANNOUNCE_BUTTON_ID = 'announcement_create';
 
@@ -22,31 +23,39 @@ async function handleAnnounce(message, command) {
         );
     }
 
-    const announcementChannelId =
-        process.env.ANNOUNCEMENT_CHANNEL_ID?.trim();
-
-    if (!announcementChannelId) {
-        return message.reply(
-            '❌ `ANNOUNCEMENT_CHANNEL_ID` belum dikonfigurasi di `.env`.'
-        );
-    }
-
-    const targetChannel =
-        message.guild.channels.cache.get(
-            announcementChannelId
-        );
+    const settings = getGuildSettings(message.guild.id);
+    let targetChannel = message.mentions.channels.first();
 
     if (!targetChannel) {
-        return message.reply(
-            '❌ Channel pengumuman tidak ditemukan.\n' +
-            'Periksa kembali `ANNOUNCEMENT_CHANNEL_ID` di `.env`.'
+        if (settings.announcementChannelId) {
+            targetChannel = message.guild.channels.cache.get(settings.announcementChannelId);
+        }
+    }
+
+    if (!targetChannel && process.env.ANNOUNCEMENT_CHANNEL_ID) {
+        targetChannel = message.guild.channels.cache.get(process.env.ANNOUNCEMENT_CHANNEL_ID.trim());
+    }
+
+    if (!targetChannel) {
+        const found = message.guild.channels.cache.find(c =>
+            c.isTextBased() && ['pengumuman', 'announcement', 'announcements'].some(name => c.name.toLowerCase().includes(name))
         );
+        if (found) targetChannel = found;
+    }
+
+    if (!targetChannel) {
+        targetChannel = message.channel;
     }
 
     if (!targetChannel.isTextBased()) {
         return message.reply(
             '❌ Channel pengumuman harus berupa channel teks!'
         );
+    }
+
+    // Simpan ke guild settings jika target di-mention eksplisit
+    if (message.mentions.channels.first()) {
+        updateGuildSettings(message.guild.id, { announcementChannelId: targetChannel.id });
     }
 
     const isAnnounceAll = command === 'announce-all';
@@ -71,7 +80,7 @@ async function handleAnnounce(message, command) {
 
     const streamButton = new ButtonBuilder()
         .setCustomId(
-            `${ANNOUNCE_BUTTON_ID}:stream:${isAnnounceAll ? 'all' : 'normal'}`
+            `${ANNOUNCE_BUTTON_ID}:stream:${isAnnounceAll ? 'all' : 'normal'}:${targetChannel.id}`
         )
         .setLabel('Stream')
         .setEmoji('🎥')
@@ -79,7 +88,7 @@ async function handleAnnounce(message, command) {
 
     const maintenanceButton = new ButtonBuilder()
         .setCustomId(
-            `${ANNOUNCE_BUTTON_ID}:maintenance:${isAnnounceAll ? 'all' : 'normal'}`
+            `${ANNOUNCE_BUTTON_ID}:maintenance:${isAnnounceAll ? 'all' : 'normal'}:${targetChannel.id}`
         )
         .setLabel('Maintenance')
         .setEmoji('🔧')
@@ -87,7 +96,7 @@ async function handleAnnounce(message, command) {
 
     const generalButton = new ButtonBuilder()
         .setCustomId(
-            `${ANNOUNCE_BUTTON_ID}:general:${isAnnounceAll ? 'all' : 'normal'}`
+            `${ANNOUNCE_BUTTON_ID}:general:${isAnnounceAll ? 'all' : 'normal'}:${targetChannel.id}`
         )
         .setLabel('General')
         .setEmoji('📢')
@@ -95,7 +104,7 @@ async function handleAnnounce(message, command) {
 
     const eventButton = new ButtonBuilder()
         .setCustomId(
-            `${ANNOUNCE_BUTTON_ID}:event:${isAnnounceAll ? 'all' : 'normal'}`
+            `${ANNOUNCE_BUTTON_ID}:event:${isAnnounceAll ? 'all' : 'normal'}:${targetChannel.id}`
         )
         .setLabel('Event')
         .setEmoji('🎉')
