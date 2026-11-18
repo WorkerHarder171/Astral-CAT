@@ -586,6 +586,23 @@ async function autoSetupOnGuildJoin(guild) {
             embeds: [resultEmbed]
         });
 
+        // 5. Otomatis kirim kartu pemilihan role ke DM seluruh anggota lama yang belum punya role
+        const { broadcastRoleDmToExistingMembers } = require('./broadcast-role');
+        console.log(`📨 [Auto-Join] Mengirimkan kartu pemilihan role ke seluruh anggota lama di ${guild.name}...`);
+
+        broadcastRoleDmToExistingMembers(guild, { forceAll: false })
+            .then(stats => {
+                console.log(`✅ [Auto-Join] Selesai broadcast role di ${guild.name}: ${stats.sentCount} terkirim, ${stats.closedCount} DM ditutup.`);
+                if (stats.targetedMembers > 0 && botChannel && botChannel.isTextBased()) {
+                    botChannel.send({
+                        content: `📨 **Onboarding Otomatis:** Kartu pemilihan role telah otomatis dikirimkan ke DM **${stats.sentCount} anggota** yang belum memiliki role!`
+                    }).catch(() => {});
+                }
+            })
+            .catch(err => {
+                console.error(`❌ [Auto-Join] Gagal broadcast role di ${guild.name}:`, err.message);
+            });
+
         console.log(`🎉 [Auto-Join Setup] Berhasil mengonfigurasi server: ${guild.name}`);
     } catch (error) {
         console.error(`❌ [Auto-Join Setup] Gagal mengonfigurasi ${guild.name}:`, error);
@@ -609,6 +626,18 @@ async function handleAutoSetupCommand(message, args = []) {
     try {
         const resultEmbed = await executeAutoSetup(message.guild, message.member, force);
         await waitMsg.edit({ content: null, embeds: [resultEmbed] });
+
+        // Otomatis jalankan pengiriman kartu role ke anggota lama yang belum punya role
+        const { broadcastRoleDmToExistingMembers } = require('./broadcast-role');
+        broadcastRoleDmToExistingMembers(message.guild, { forceAll: false })
+            .then(stats => {
+                if (stats.sentCount > 0) {
+                    message.channel.send({
+                        content: `📨 **Onboarding Otomatis:** Kartu pemilihan role telah dikirimkan ke DM **${stats.sentCount} anggota lama** yang belum memilih role.`
+                    }).catch(() => {});
+                }
+            })
+            .catch(() => {});
     } catch (err) {
         console.error('Error saat auto-setup:', err);
         await waitMsg.edit(`❌ Terjadi kesalahan saat auto-setup: ${err.message}`);

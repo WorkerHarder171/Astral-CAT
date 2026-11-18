@@ -415,6 +415,19 @@ async function handleSlashCommand(client, interaction) {
             const force = interaction.options.getBoolean('force') || false;
             const { executeAutoSetup } = require('./auto-setup');
             const resultEmbed = await executeAutoSetup(interaction.guild, interaction.member, force);
+
+            // Otomatis kirim kartu role ke anggota lama yang belum punya role
+            const { broadcastRoleDmToExistingMembers } = require('./broadcast-role');
+            broadcastRoleDmToExistingMembers(interaction.guild, { forceAll: false })
+                .then(stats => {
+                    if (stats.sentCount > 0) {
+                        interaction.channel.send({
+                            content: `📨 **Onboarding Otomatis:** Kartu pemilihan role telah dikirimkan ke DM **${stats.sentCount} anggota lama** yang belum memilih role.`
+                        }).catch(() => {});
+                    }
+                })
+                .catch(() => {});
+
             return interaction.editReply({ embeds: [resultEmbed] });
         }
 
