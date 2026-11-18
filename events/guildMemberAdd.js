@@ -117,9 +117,8 @@ async function handleGuildMemberAdd(member) {
             const botPermissions = welcomeChannel.permissionsFor(member.guild.members.me);
             if (!botPermissions || botPermissions.has(['SendMessages', 'AttachFiles'])) {
                 const card = await welcomeModule.generateWelcomeCard(member);
-                const roleMention = settings.roleChannelId ? ` Jangan lupa ambil role kamu di <#${settings.roleChannelId}>!` : '';
                 await welcomeChannel.send({
-                    content: `🎉 Halo <@${member.user.id}>, selamat datang di **${member.guild.name}**!${roleMention}`,
+                    content: `🎉 Halo <@${member.user.id}>, selamat datang di **${member.guild.name}**! Silakan periksa pesan langsung (DM) untuk memilih role kamu (atau ketik \`!claim-role\`).`,
                     files: [card]
                 });
                 console.log(`✅ Welcome card berhasil dikirim ke #${welcomeChannel.name} di ${member.guild.name}`);

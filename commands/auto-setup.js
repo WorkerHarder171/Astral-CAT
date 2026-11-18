@@ -67,10 +67,9 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     const hasRules = Boolean(currentSettings.rulesChannelId && guild.channels.cache.has(currentSettings.rulesChannelId));
     const hasAnnounce = Boolean(currentSettings.announcementChannelId && guild.channels.cache.has(currentSettings.announcementChannelId));
     const hasWelcome = Boolean(currentSettings.welcomeChannelId && guild.channels.cache.has(currentSettings.welcomeChannelId));
-    const hasRole = Boolean(currentSettings.roleChannelId && guild.channels.cache.has(currentSettings.roleChannelId));
     const hasPlayMusic = Boolean(currentSettings.musicChannelId && guild.channels.cache.has(currentSettings.musicChannelId));
 
-    const allChannelsPresent = hasBot && hasRules && hasAnnounce && hasWelcome && hasRole && hasPlayMusic;
+    const allChannelsPresent = hasBot && hasRules && hasAnnounce && hasWelcome && hasPlayMusic;
 
     /*
     |--------------------------------------------------------------------------
@@ -90,10 +89,10 @@ async function executeAutoSetup(guild, executorMember, force = false) {
                 `• 📜 **Channel Rules:** <#${currentSettings.rulesChannelId}>`,
                 `• 📢 **Channel Pengumuman:** <#${currentSettings.announcementChannelId}>`,
                 `• 👋 **Channel Sambutan:** <#${currentSettings.welcomeChannelId}>`,
-                `• 🚻 **Panel Role:** <#${currentSettings.roleChannelId}>`,
                 `• 🎵 **Channel Play Music:** <#${currentSettings.musicChannelId}>`,
                 `• 🚻 **Role Men (Sidebar):** ${currentSettings.roleMenId ? `<@&${currentSettings.roleMenId}>` : '*Belum terpasang*'}`,
                 `• 🚻 **Role Women (Sidebar):** ${currentSettings.roleWomenId ? `<@&${currentSettings.roleWomenId}>` : '*Belum terpasang*'}`,
+                `• 📩 **Pemilihan Role:** Berbasis DM otomatis & \`!claim-role\``,
                 '',
                 '✨ *Semua channel sudah siap digunakan tanpa duplikasi.*',
                 '',
@@ -408,49 +407,19 @@ async function executeAutoSetup(guild, executorMember, force = false) {
 
     /*
     |--------------------------------------------------------------------------
-    | F. TEXT CHANNEL: 🚻・pilih-role (Gender Role Panel)
+    | F. BERSIHKAN TEXT CHANNEL PILIH ROLE (SEKARANG BERBASIS DM OTOMATIS)
     |--------------------------------------------------------------------------
     */
-    let roleChannel = findExistingChannel(guild, [
+    const legacyRoleChannel = findExistingChannel(guild, [
         'pilihrole',
         'claimrole',
-        'roles',
         'ambilrole',
         'gender'
     ], ChannelType.GuildText);
 
-    if (!roleChannel) {
-        roleChannel = await guild.channels.create({
-            name: '🚻・pilih-role',
-            type: ChannelType.GuildText,
-            topic: 'Pilih role gender kamu dengan menekan tombol interaktif di bawah',
-            permissionOverwrites: [
-                {
-                    id: guild.roles.everyone.id,
-                    allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory],
-                    deny: [PermissionFlagsBits.SendMessages]
-                },
-                {
-                    id: botMember.id,
-                    allow: [
-                        PermissionFlagsBits.ViewChannel,
-                        PermissionFlagsBits.SendMessages,
-                        PermissionFlagsBits.EmbedLinks
-                    ]
-                }
-            ]
-        });
-        const panel = await createRolePanel(guild);
-        await roleChannel.send(panel);
-        logSteps.push(`✅ Dibuat channel & panel tombol role: <#${roleChannel.id}>`);
-    } else {
-        const messages = await roleChannel.messages.fetch({ limit: 10 }).catch(() => null);
-        const hasPanel = messages && messages.some(m => m.author.id === botMember.id && m.components.length > 0);
-        if (!hasPanel) {
-            const panel = await createRolePanel(guild);
-            await roleChannel.send(panel);
-        }
-        logSteps.push(`ℹ️ Menggunakan channel role yang ada: <#${roleChannel.id}>`);
+    if (legacyRoleChannel) {
+        await legacyRoleChannel.delete('Astral Cat: Menghilangkan text channel pilih role (beralih ke DM otomatis)').catch(() => {});
+        logSteps.push(`🗑️ Menghapus text channel pilih role: #${legacyRoleChannel.name} (beralih ke sistem DM)`);
     }
 
     /*
@@ -498,7 +467,7 @@ async function executeAutoSetup(guild, executorMember, force = false) {
                 '',
                 '📌 **Langkah Awal Anggota Baru:**',
                 `1. 📜 Silakan baca tata tertib di <#${rulesChannel.id}>`,
-                `2. 🚻 Ambil role gender kamu di <#${roleChannel.id}> atau langsung dari pesan DM otomatis`,
+                '2. 🚻 Ambil role gender kamu melalui pesan DM otomatis dari bot (atau ketik `!claim-role`)',
                 `3. 🎵 Putar musik favoritmu di <#${playMusicChannel.id}>`,
                 `4. 🤖 Gunakan bot commands di <#${botChannel.id}>`,
                 '',
@@ -523,7 +492,6 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         rulesChannelId: rulesChannel.id,
         announcementChannelId: announceChannel.id,
         welcomeChannelId: welcomeChannel.id,
-        roleChannelId: roleChannel.id,
         musicChannelId: playMusicChannel.id,
         roleMenId: menRole.id,
         roleWomenId: womenRole.id,
@@ -545,9 +513,8 @@ async function executeAutoSetup(guild, executorMember, force = false) {
             `• 📢 **Channel Announcement:** <#${announceChannel.id}> *(Siap digunakan)*`,
             `• 🎵 **Channel Play Music:** <#${playMusicChannel.id}> *(Voice Lounge dinonaktifkan)*`,
             `• 👋 **Channel Sambutan:** <#${welcomeChannel.id}> *(Banner kanvas otomatis)*`,
-            `• 🚻 **Panel Role:** <#${roleChannel.id}> *(Panel tombol interaktif)*`,
             `• 👥 **Role Sidebar:** ${menRole} & ${womenRole} *(Tampil terpisah di kanan)*`,
-            `• 📩 **Auto DM Onboarding:** Otomatis mengirim DM pemilihan role saat member bergabung`,
+            '• 📩 **Auto DM Onboarding:** Otomatis mengirim DM pemilihan role atau ketik `!claim-role`',
             '',
             '### 💡 Langkah Terakhir Admin (Penting!):',
             'Buka **Server Settings > Roles**, lalu pastikan role **"Astral Cat" berada di posisi atas** melebihi role *Men* & *Women* agar bot dapat memberikan role secara lancar.',
