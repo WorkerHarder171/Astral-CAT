@@ -80,16 +80,16 @@ async function createRolePanel(guild) {
 
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-            .setCustomId('claim_role')
-            .setLabel('Claim Role')
-            .setEmoji('🎫')
+            .setCustomId(`claim_gender_man:${guild.id}`)
+            .setLabel('Men')
+            .setEmoji('♂️')
             .setStyle(ButtonStyle.Primary),
 
         new ButtonBuilder()
-            .setCustomId('report_role')
-            .setLabel('Lapor Salah Role')
-            .setEmoji('📩')
-            .setStyle(ButtonStyle.Secondary)
+            .setCustomId(`claim_gender_woman:${guild.id}`)
+            .setLabel('Women')
+            .setEmoji('♀️')
+            .setStyle(ButtonStyle.Success)
     );
 
     return {

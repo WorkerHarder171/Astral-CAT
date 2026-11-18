@@ -1,13 +1,62 @@
 const {
     MessageFlags
 } = require('discord.js');
+const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
+
+async function resolveOrCreateGenderRole(guild, isMan) {
+    const settings = getGuildSettings(guild.id);
+    const configuredRoleId = isMan ? settings.roleMenId : settings.roleWomenId;
+
+    // 1. Cek jika ID yang tersimpan di guild settings valid di server ini
+    if (configuredRoleId && guild.roles.cache.has(configuredRoleId)) {
+        return guild.roles.cache.get(configuredRoleId);
+    }
+
+    // 2. Cek fallback dari .env jika cocok dengan server ini
+    const envRoleId = isMan ? process.env.ROLE_MEN_ID?.trim() : process.env.ROLE_WOMEN_ID?.trim();
+    if (envRoleId && guild.roles.cache.has(envRoleId)) {
+        if (isMan) updateGuildSettings(guild.id, { roleMenId: envRoleId });
+        else updateGuildSettings(guild.id, { roleWomenId: envRoleId });
+        return guild.roles.cache.get(envRoleId);
+    }
+
+    // 3. Cari role yang sudah ada di server berdasarkan nama
+    const keywords = isMan
+        ? ['man', 'men', 'male', 'pria', 'laki-laki', 'laki', 'cowok']
+        : ['woman', 'women', 'female', 'wanita', 'perempuan', 'cewek'];
+
+    let foundRole = guild.roles.cache.find(r =>
+        keywords.some(kw => r.name.toLowerCase().trim() === kw || r.name.toLowerCase().includes(kw))
+    );
+
+    if (foundRole) {
+        if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
+        else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
+        return foundRole;
+    }
+
+    // 4. Jika belum ada, otomatis buat role baru jika bot memiliki izin ManageRoles
+    const botMember = guild.members.me;
+    if (botMember && botMember.permissions.has('ManageRoles')) {
+        try {
+            foundRole = await guild.roles.create({
+                name: isMan ? 'Men ♂️' : 'Women ♀️',
+                color: isMan ? 0x3498DB : 0xE91E63,
+                reason: 'Astral Cat: Otomatis membuat role gender untuk kemudahan setup server'
+            });
+            console.log(`✅ Otomatis membuat role "${foundRole.name}" di server: ${guild.name}`);
+            if (isMan) updateGuildSettings(guild.id, { roleMenId: foundRole.id });
+            else updateGuildSettings(guild.id, { roleWomenId: foundRole.id });
+            return foundRole;
+        } catch (err) {
+            console.error(`Gagal membuat role otomatis di ${guild.name}:`, err.message);
+        }
+    }
+
+    return null;
+}
 
 module.exports = async (client, interaction) => {
-    const ROLE_MEN_ID =
-        process.env.ROLE_MEN_ID?.trim() || '';
-
-    const ROLE_WOMEN_ID =
-        process.env.ROLE_WOMEN_ID?.trim() || '';
 
     /*
     |--------------------------------------------------------------------------
@@ -101,44 +150,23 @@ module.exports = async (client, interaction) => {
         const isMan =
             action === 'claim_gender_man';
 
-        const targetRoleId = isMan
-            ? ROLE_MEN_ID
-            : ROLE_WOMEN_ID;
-
-        const oppositeRoleId = isMan
-            ? ROLE_WOMEN_ID
-            : ROLE_MEN_ID;
-
         const genderName = isMan
             ? 'Man'
             : 'Woman';
 
         /*
         |--------------------------------------------------------------------------
-        | CHECK ENV
+        | GET TARGET & OPPOSITE ROLE (SMART MULTI-GUILD RESOLVER)
         |--------------------------------------------------------------------------
         */
 
-        if (!targetRoleId) {
-            return interaction.editReply({
-                content:
-                    `❌ Role **${genderName}** belum dikonfigurasi di \`.env\`.`
-            });
-        }
-
-        /*
-        |--------------------------------------------------------------------------
-        | GET TARGET ROLE
-        |--------------------------------------------------------------------------
-        */
-
-        const targetRole =
-            guild.roles.cache.get(targetRoleId);
+        const targetRole = await resolveOrCreateGenderRole(guild, isMan);
+        const oppositeRole = await resolveOrCreateGenderRole(guild, !isMan);
 
         if (!targetRole) {
             return interaction.editReply({
                 content:
-                    `❌ Role **${genderName}** tidak ditemukan di server.`
+                    `❌ Role **${genderName}** tidak ditemukan dan bot tidak memiliki izin **Manage Roles** untuk membuatnya secara otomatis.`
             });
         }
 
@@ -148,7 +176,7 @@ module.exports = async (client, interaction) => {
         |--------------------------------------------------------------------------
         */
 
-        if (member.roles.cache.has(targetRoleId)) {
+        if (member.roles.cache.has(targetRole.id)) {
             return interaction.editReply({
                 content:
                     `⚠️ Kamu sudah memiliki role **${targetRole.name}**.`
@@ -162,8 +190,8 @@ module.exports = async (client, interaction) => {
         */
 
         if (
-            oppositeRoleId &&
-            member.roles.cache.has(oppositeRoleId)
+            oppositeRole &&
+            member.roles.cache.has(oppositeRole.id)
         ) {
             return interaction.editReply({
                 content: [
@@ -243,22 +271,25 @@ module.exports = async (client, interaction) => {
             |--------------------------------------------------------------------------
             */
 
-            const disabledComponents =
-                interaction.message.components.map(row => ({
-                    type: row.type,
-                    components: row.components.map(component => ({
-                        type: component.type,
-                        style: component.style,
-                        label: component.label,
-                        emoji: component.emoji,
-                        custom_id: component.customId,
-                        disabled: true
-                    }))
-                }));
+            // Nonaktifkan tombol hanya jika pesan berada di DM pribadi pengguna
+            if (!interaction.inGuild() || interaction.channel?.isDMBased?.()) {
+                const disabledComponents =
+                    interaction.message.components.map(row => ({
+                        type: row.type,
+                        components: row.components.map(component => ({
+                            type: component.type,
+                            style: component.style,
+                            label: component.label,
+                            emoji: component.emoji,
+                            custom_id: component.customId,
+                            disabled: true
+                        }))
+                    }));
 
-            await interaction.message.edit({
-                components: disabledComponents
-            }).catch(() => {});
+                await interaction.message.edit({
+                    components: disabledComponents
+                }).catch(() => {});
+            }
 
             /*
             |--------------------------------------------------------------------------
