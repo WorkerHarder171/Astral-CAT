@@ -321,31 +321,33 @@ function startWebServer(client) {
     discordClient = client;
     const port = parseInt(process.env.PORT || '3000', 10);
 
-    const server = app.listen(port, () => {
-        console.log('========================================');
-        console.log(`🌐 Dashboard Website aktif di: http://localhost:${port}`);
-        console.log(`📜 Privacy Policy tersedia di: http://localhost:${port}/privacy`);
-        console.log(`⚙️  Pengaturan Bot tersedia di: http://localhost:${port}/settings`);
-        console.log('========================================');
-    });
+    return new Promise((resolve) => {
+        const server = app.listen(port, () => {
+            console.log('========================================');
+            console.log(`🌐 Dashboard Website aktif di: http://localhost:${port}`);
+            console.log(`📜 Privacy Policy tersedia di: http://localhost:${port}/privacy`);
+            console.log(`⚙️  Pengaturan Bot tersedia di: http://localhost:${port}/settings`);
+            console.log('========================================');
+            resolve(server);
+        });
 
-    server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.error('========================================');
-            console.error(`⚠️  PERINGATAN: Bot Astral Cat sudah berjalan di background (PM2/Port ${port})!`);
-            console.error('👉 Proses ini dihentikan otomatis agar bot tidak merespon ganda (redundant/duplikat).');
-            console.error('💡 Gunakan perintah: `npx pm2 logs` atau `npx pm2 restart astral-cat`');
-            console.error('========================================');
-            if (discordClient) {
-                try { discordClient.destroy(); } catch (_) {}
+        server.on('error', (err) => {
+            if (err.code === 'EADDRINUSE') {
+                console.error('========================================');
+                console.error(`⚠️  PERINGATAN: Bot Astral Cat sudah berjalan di background (PM2/Port ${port})!`);
+                console.error('👉 Proses ini dihentikan otomatis agar bot tidak merespon ganda (redundant/duplikat).');
+                console.error('💡 Gunakan perintah: `npx pm2 logs` atau `npx pm2 restart astral-cat`');
+                console.error('========================================');
+                if (discordClient) {
+                    try { discordClient.destroy(); } catch (_) {}
+                }
+                process.exit(0);
+            } else {
+                console.error('❌ Web server error:', err);
+                resolve(server);
             }
-            process.exit(0);
-        } else {
-            console.error('❌ Web server error:', err);
-        }
+        });
     });
-
-    return server;
 }
 
 module.exports = {

@@ -131,12 +131,15 @@ async function autoInitializeGuild(guild, { sendGreeting = true } = {}) {
         // 1. Pastikan record settings tersimpan
         const settings = getGuildSettings(guild.id);
 
-        // Jika server baru dimasuki (sendGreeting=true) atau belum pernah setup, jalankan auto-setup di channel bot
-        if (!settings.autoSetupCompleted || sendGreeting) {
-            console.log(`🚀 [Onboarding] Menjalankan auto-setup di channel bot untuk: "${guild.name}"...`);
-            await autoSetupOnGuildJoin(guild);
+        // 2. Proteksi Anti-Redundansi One-Time Setup:
+        // Jika server sudah pernah disetup sebelumnya, JANGAN jalankan auto-setup lagi!
+        if (settings.autoSetupCompleted) {
+            console.log(`🔒 [Onboarding] Server "${guild.name}" sudah pernah disetup sebelumnya (One-Time Lock aktif). Auto-setup dilewati.`);
             return;
         }
+
+        console.log(`🚀 [Onboarding] Menjalankan auto-setup di channel bot untuk: "${guild.name}"...`);
+        await autoSetupOnGuildJoin(guild);
 
         console.log(`🔒 [Onboarding] Server "${guild.name}" sudah pernah disetup sebelumnya (One-Time Lock aktif).`);
     } catch (error) {

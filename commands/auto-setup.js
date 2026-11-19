@@ -26,12 +26,23 @@ function normalizeName(str) {
 function findExistingChannel(guild, keywords, type = ChannelType.GuildText) {
     const normalizedKeywords = keywords.map(normalizeName);
 
+    // 1. Cek exact match terlebih dahulu
+    const exactMatch = guild.channels.cache.find(c => {
+        if (type === ChannelType.GuildText && !c.isTextBased()) return false;
+        if (type === ChannelType.GuildVoice && c.type !== ChannelType.GuildVoice) return false;
+
+        const normName = normalizeName(c.name);
+        return normalizedKeywords.some(kw => normName === kw);
+    });
+    if (exactMatch) return exactMatch;
+
+    // 2. Cek partial match
     return guild.channels.cache.find(c => {
         if (type === ChannelType.GuildText && !c.isTextBased()) return false;
         if (type === ChannelType.GuildVoice && c.type !== ChannelType.GuildVoice) return false;
 
         const normName = normalizeName(c.name);
-        return normalizedKeywords.some(kw => normName === kw || normName.includes(kw));
+        return normalizedKeywords.some(kw => normName.includes(kw));
     }) || null;
 }
 
@@ -66,71 +77,77 @@ function findExistingRole(guild, keywords, isMan = false) {
     }) || null;
 }
 
-// Kunci konkurensi: mencegah auto-setup berjalan dua kali secara paralel di server yang sama
-const activeSetups = new Set();
-const activeJoinSetups = new Set();
+// Kunci konkurensi terpadu: mencegah auto-setup berjalan dua kali secara paralel di server yang sama
+const activeGuildSetupLocks = new Set();
 
 /**
  * Menjalankan auto-setup seluruh channel dan role yang dibutuhkan Astral Cat
  * @param {import('discord.js').Guild} guild
  * @param {import('discord.js').GuildMember|null} executorMember
  * @param {boolean} force - Apakah memaksa jalan ulang jika sudah pernah disetup
+ * @param {boolean} isInternalCall - Apakah dipanggil secara internal dari autoSetupOnGuildJoin
  * @returns {Promise<EmbedBuilder>}
  */
-async function executeAutoSetup(guild, executorMember, force = false) {
-    if (activeSetups.has(guild.id)) {
+async function executeAutoSetup(guild, executorMember, force = false, isInternalCall = false) {
+    if (!isInternalCall && activeGuildSetupLocks.has(guild.id)) {
         return new EmbedBuilder()
             .setColor(0xFEE75C)
             .setTitle('⏳ Auto-Setup Sedang Berjalan')
             .setDescription('Proses konfigurasi sedang berlangsung di server ini. Harap tunggu hingga selesai untuk mencegah redundansi.');
     }
 
-    activeSetups.add(guild.id);
+    if (!isInternalCall) {
+        activeGuildSetupLocks.add(guild.id);
+    }
 
     try {
+        // Tarik cache terbaru secara real-time dari Discord API untuk mencegah race conditions & duplikasi
+        await guild.channels.fetch().catch(() => {});
+        await guild.roles.fetch().catch(() => {});
+
         const botMember = guild.members.me;
         const currentSettings = getGuildSettings(guild.id);
 
-    // Cek keberadaan channel yang sudah dikonfigurasi
-    const hasBot = Boolean(currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId));
-    const hasRules = Boolean(currentSettings.rulesChannelId && guild.channels.cache.has(currentSettings.rulesChannelId));
-    const hasAnnounce = Boolean(currentSettings.announcementChannelId && guild.channels.cache.has(currentSettings.announcementChannelId));
-    const hasWelcome = Boolean(currentSettings.welcomeChannelId && guild.channels.cache.has(currentSettings.welcomeChannelId));
-    const hasPlayMusic = Boolean(currentSettings.musicChannelId && guild.channels.cache.has(currentSettings.musicChannelId));
+        // Cek keberadaan channel yang sudah dikonfigurasi
+        const hasBot = Boolean(currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId));
+        const hasRules = Boolean(currentSettings.rulesChannelId && guild.channels.cache.has(currentSettings.rulesChannelId));
+        const hasAnnounce = Boolean(currentSettings.announcementChannelId && guild.channels.cache.has(currentSettings.announcementChannelId));
+        const hasWelcome = Boolean(currentSettings.welcomeChannelId && guild.channels.cache.has(currentSettings.welcomeChannelId));
+        const hasPlayMusic = Boolean(currentSettings.musicChannelId && guild.channels.cache.has(currentSettings.musicChannelId));
 
-    const allChannelsPresent = hasBot && hasRules && hasAnnounce && hasWelcome && hasPlayMusic;
+        const allChannelsPresent = hasBot && hasRules && hasAnnounce && hasWelcome && hasPlayMusic;
 
-    /*
-    |--------------------------------------------------------------------------
-    | 1. PERLINDUNGAN ONE-TIME SETUP
-    |--------------------------------------------------------------------------
-    | Jika sudah lengkap semua dan tidak dipaksa force, tampilkan status terkunci
-    */
-    if (currentSettings.autoSetupCompleted && allChannelsPresent && !force) {
-        return new EmbedBuilder()
-            .setColor(0xFEE75C)
-            .setTitle('🔒 Auto-Setup Sudah Aktif & Lengkap (One-Time Execution)')
-            .setDescription([
-                `Server **${guild.name}** sudah berhasil disesuaikan dengan seluruh text channel & role Astral Cat.`,
-                '',
-                '### 📌 Konfigurasi Aktif Saat Ini:',
-                `• 🤖 **Channel Bot:** <#${currentSettings.botChannelId}>`,
-                `• 📜 **Channel Rules:** <#${currentSettings.rulesChannelId}>`,
-                `• 📢 **Channel Pengumuman:** <#${currentSettings.announcementChannelId}>`,
-                `• 👋 **Channel Sambutan:** <#${currentSettings.welcomeChannelId}>`,
-                `• 🎵 **Channel Play Music:** <#${currentSettings.musicChannelId}>`,
-                `• 🚻 **Role Men (Sidebar):** ${currentSettings.roleMenId ? `<@&${currentSettings.roleMenId}>` : '*Belum terpasang*'}`,
-                `• 🚻 **Role Women (Sidebar):** ${currentSettings.roleWomenId ? `<@&${currentSettings.roleWomenId}>` : '*Belum terpasang*'}`,
-                `• 📩 **Pemilihan Role:** Berbasis DM otomatis & \`!claim-role\``,
-                '',
-                '✨ *Semua channel sudah siap digunakan tanpa duplikasi.*',
-                '',
-                '💡 **Ingin Memperbarui Paksa?**',
-                'Ketik `!setup-all force` atau `/auto-setup force:True`'
-            ].join('\n'))
-            .setFooter({ text: 'Proteksi Anti-Duplikasi • Astral Cat' })
-            .setTimestamp();
-    }
+        /*
+        |--------------------------------------------------------------------------
+        | 1. PERLINDUNGAN ONE-TIME SETUP
+        |--------------------------------------------------------------------------
+        | Jika sudah lengkap semua dan tidak dipaksa force, tampilkan status terkunci
+        */
+        if (currentSettings.autoSetupCompleted && allChannelsPresent && !force) {
+            return new EmbedBuilder()
+                .setColor(0xFEE75C)
+                .setTitle('🔒 Auto-Setup Sudah Aktif & Lengkap (One-Time Execution)')
+                .setDescription([
+                    `Server **${guild.name}** sudah berhasil disesuaikan dengan seluruh text channel & role Astral Cat.`,
+                    '',
+                    '### 📌 Konfigurasi Aktif Saat Ini:',
+                    `• 🤖 **Channel Bot:** <#${currentSettings.botChannelId}>`,
+                    `• 📜 **Channel Rules:** <#${currentSettings.rulesChannelId}>`,
+                    `• 📢 **Channel Pengumuman:** <#${currentSettings.announcementChannelId}>`,
+                    `• 👋 **Channel Sambutan:** <#${currentSettings.welcomeChannelId}>`,
+                    `• 🎵 **Channel Play Music:** <#${currentSettings.musicChannelId}>`,
+                    `• 🚻 **Role Men (Sidebar):** ${currentSettings.roleMenId ? `<@&${currentSettings.roleMenId}>` : '*Belum terpasang*'}`,
+                    `• 🚻 **Role Women (Sidebar):** ${currentSettings.roleWomenId ? `<@&${currentSettings.roleWomenId}>` : '*Belum terpasang*'}`,
+                    `• 📩 **Pemilihan Role:** Berbasis DM otomatis & \`!claim-role\``,
+                    '',
+                    '✨ *Semua channel sudah siap digunakan tanpa duplikasi.*',
+                    '',
+                    '💡 **Ingin Memperbarui Paksa?**',
+                    'Ketik `!setup-all force` atau `/auto-setup force:True`'
+                ].join('\n'))
+                .setFooter({ text: 'Proteksi Anti-Duplikasi • Astral Cat' })
+                .setTimestamp();
+        }
 
     // 2. Validasi Izin Bot
     if (!botMember.permissions.has([PermissionFlagsBits.ManageRoles, PermissionFlagsBits.ManageChannels])) {
@@ -194,13 +211,19 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     | B. TEXT CHANNEL: 🤖・bot (Bot Commands Center)
     |--------------------------------------------------------------------------
     */
-    let botChannel = findExistingChannel(guild, [
-        'bot',
-        'botcommands',
-        'botcmd',
-        'commands',
-        'cmd'
-    ], ChannelType.GuildText);
+    let botChannel = null;
+    if (currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId)) {
+        botChannel = guild.channels.cache.get(currentSettings.botChannelId);
+    }
+    if (!botChannel) {
+        botChannel = findExistingChannel(guild, [
+            'bot',
+            'botcommands',
+            'botcmd',
+            'commands',
+            'cmd'
+        ], ChannelType.GuildText);
+    }
 
     if (!botChannel) {
         botChannel = await guild.channels.create({
@@ -256,13 +279,19 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     | C. TEXT CHANNEL: 📜・rules (Server Rules)
     |--------------------------------------------------------------------------
     */
-    let rulesChannel = findExistingChannel(guild, [
-        'rules',
-        'rule',
-        'peraturan',
-        'tatatertib',
-        'terms'
-    ], ChannelType.GuildText);
+    let rulesChannel = null;
+    if (currentSettings.rulesChannelId && guild.channels.cache.has(currentSettings.rulesChannelId)) {
+        rulesChannel = guild.channels.cache.get(currentSettings.rulesChannelId);
+    }
+    if (!rulesChannel) {
+        rulesChannel = findExistingChannel(guild, [
+            'rules',
+            'rule',
+            'peraturan',
+            'tatatertib',
+            'terms'
+        ], ChannelType.GuildText);
+    }
 
     if (!rulesChannel) {
         rulesChannel = await guild.channels.create({
@@ -316,14 +345,20 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     | D. TEXT CHANNEL: 📢・announcement (Server Announcements)
     |--------------------------------------------------------------------------
     */
-    let announceChannel = findExistingChannel(guild, [
-        'announcement',
-        'announcements',
-        'pengumuman',
-        'info',
-        'news',
-        'broadcast'
-    ], ChannelType.GuildText);
+    let announceChannel = null;
+    if (currentSettings.announcementChannelId && guild.channels.cache.has(currentSettings.announcementChannelId)) {
+        announceChannel = guild.channels.cache.get(currentSettings.announcementChannelId);
+    }
+    if (!announceChannel) {
+        announceChannel = findExistingChannel(guild, [
+            'announcement',
+            'announcements',
+            'pengumuman',
+            'info',
+            'news',
+            'broadcast'
+        ], ChannelType.GuildText);
+    }
 
     if (!announceChannel) {
         announceChannel = await guild.channels.create({
@@ -365,19 +400,36 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         logSteps.push(`ℹ️ Menggunakan channel pengumuman yang ada: <#${announceChannel.id}>`);
     }
 
+    // Pembersihan duplikasi proaktif: jika terdapat channel pengumuman duplikat dengan nama serupa, bersihkan
+    const duplicateAnnounces = guild.channels.cache.filter(c =>
+        c.id !== announceChannel.id &&
+        c.isTextBased() &&
+        normalizeName(c.name) === 'announcement'
+    );
+    for (const [, dup] of duplicateAnnounces) {
+        console.warn(`[Auto-Setup] Menghapus channel duplikat pengumuman: #${dup.name} (${dup.id})`);
+        await dup.delete('Astral Cat: Pembersihan duplikasi channel pengumuman').catch(() => {});
+    }
+
     /*
     |--------------------------------------------------------------------------
     | E. TEXT CHANNEL: 🎵・play-music (Music Player Text Channel)
     |--------------------------------------------------------------------------
     */
-    let playMusicChannel = findExistingChannel(guild, [
-        'playmusic',
-        'play-music',
-        'music',
-        'musik',
-        'botmusic',
-        'pemutarmusik'
-    ], ChannelType.GuildText);
+    let playMusicChannel = null;
+    if (currentSettings.musicChannelId && guild.channels.cache.has(currentSettings.musicChannelId)) {
+        playMusicChannel = guild.channels.cache.get(currentSettings.musicChannelId);
+    }
+    if (!playMusicChannel) {
+        playMusicChannel = findExistingChannel(guild, [
+            'playmusic',
+            'play-music',
+            'music',
+            'musik',
+            'botmusic',
+            'pemutarmusik'
+        ], ChannelType.GuildText);
+    }
 
     if (!playMusicChannel) {
         playMusicChannel = await guild.channels.create({
@@ -456,14 +508,20 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     | G. TEXT CHANNEL: 👋・selamat-datang (Welcome Channel)
     |--------------------------------------------------------------------------
     */
-    let welcomeChannel = findExistingChannel(guild, [
-        'welcome',
-        'selamatdatang',
-        'sambutan',
-        'welcomer',
-        'memberbaru',
-        'join'
-    ], ChannelType.GuildText);
+    let welcomeChannel = null;
+    if (currentSettings.welcomeChannelId && guild.channels.cache.has(currentSettings.welcomeChannelId)) {
+        welcomeChannel = guild.channels.cache.get(currentSettings.welcomeChannelId);
+    }
+    if (!welcomeChannel) {
+        welcomeChannel = findExistingChannel(guild, [
+            'welcome',
+            'selamatdatang',
+            'sambutan',
+            'welcomer',
+            'memberbaru',
+            'join'
+        ], ChannelType.GuildText);
+    }
 
     if (!welcomeChannel) {
         welcomeChannel = await guild.channels.create({
@@ -556,7 +614,9 @@ async function executeAutoSetup(guild, executorMember, force = false) {
 
     return reportEmbed;
     } finally {
-        activeSetups.delete(guild.id);
+        if (!isInternalCall) {
+            activeGuildSetupLocks.delete(guild.id);
+        }
     }
 }
 
@@ -565,24 +625,42 @@ async function executeAutoSetup(guild, executorMember, force = false) {
  * @param {import('discord.js').Guild} guild
  */
 async function autoSetupOnGuildJoin(guild) {
-    if (activeJoinSetups.has(guild.id)) {
+    const currentSettings = getGuildSettings(guild.id);
+
+    // Proteksi 1: Jika server sudah pernah setup selesai, abaikan (One-Time Execution)
+    if (currentSettings.autoSetupCompleted) {
+        console.log(`🔒 [Auto-Join Setup] Server "${guild.name}" sudah pernah disetup sebelumnya. Auto-setup join dilewati.`);
+        return;
+    }
+
+    // Proteksi 2: Mutex Lock terpadu (mencegah double execution saat gateway emit ganda)
+    if (activeGuildSetupLocks.has(guild.id)) {
         console.warn(`[Auto-Join Setup] Setup untuk ${guild.name} sedang berjalan. Permintaan duplikat diabaikan.`);
         return;
     }
 
-    activeJoinSetups.add(guild.id);
+    activeGuildSetupLocks.add(guild.id);
 
     try {
+        await guild.channels.fetch().catch(() => {});
+        await guild.roles.fetch().catch(() => {});
+
         const botMember = guild.members.me;
 
-        // 1. Cari atau buat channel bot terlebih dahulu
-        let botChannel = findExistingChannel(guild, [
-            'bot',
-            'botcommands',
-            'botcmd',
-            'commands',
-            'cmd'
-        ], ChannelType.GuildText);
+        // 1. Cari atau buat channel bot terlebih dahulu (cek settings ID terlebih dahulu)
+        let botChannel = null;
+        if (currentSettings.botChannelId && guild.channels.cache.has(currentSettings.botChannelId)) {
+            botChannel = guild.channels.cache.get(currentSettings.botChannelId);
+        }
+        if (!botChannel) {
+            botChannel = findExistingChannel(guild, [
+                'bot',
+                'botcommands',
+                'botcmd',
+                'commands',
+                'cmd'
+            ], ChannelType.GuildText);
+        }
 
         if (!botChannel) {
             botChannel = await guild.channels.create({
@@ -616,8 +694,8 @@ async function autoSetupOnGuildJoin(guild) {
             content: `⚡ **Halo ${guild.name}!** Astral Cat baru saja masuk ke server. Sedang menjalankan \`!setup-all\` secara otomatis...`
         });
 
-        // 3. Jalankan executeAutoSetup
-        const resultEmbed = await executeAutoSetup(guild, botMember, true);
+        // 3. Jalankan executeAutoSetup secara internal (force = false, isInternalCall = true)
+        const resultEmbed = await executeAutoSetup(guild, botMember, false, true);
 
         // 4. Perbarui pesan dengan embed laporan
         await progressMsg.edit({
@@ -646,7 +724,7 @@ async function autoSetupOnGuildJoin(guild) {
     } catch (error) {
         console.error(`❌ [Auto-Join Setup] Gagal mengonfigurasi ${guild.name}:`, error);
     } finally {
-        activeJoinSetups.delete(guild.id);
+        activeGuildSetupLocks.delete(guild.id);
     }
 }
 

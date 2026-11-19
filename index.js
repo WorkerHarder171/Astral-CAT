@@ -430,16 +430,16 @@ client.on(
 |--------------------------------------------------------------------------
 */
 
-// Memulai Web Dashboard & API Server
-startWebServer(client);
-
-// Login ke Discord Gateway
-if (!process.env.DISCORD_TOKEN) {
-    console.warn('⚠️  DISCORD_TOKEN belum dikonfigurasi di .env.');
-    console.log('👉 Buka dashboard di http://localhost:3000/settings untuk memasukkan token bot.');
-} else {
-    client.login(process.env.DISCORD_TOKEN).catch((err) => {
-        console.error('❌ Gagal login ke Discord:', err.message);
-        console.log('👉 Masukkan token baru di dashboard: http://localhost:3000/settings');
-    });
-}
+// Memulai Web Dashboard & API Server terlebih dahulu (Mencegah multi-proses berebut Gateway)
+startWebServer(client).then(() => {
+    // Login ke Discord Gateway
+    if (!process.env.DISCORD_TOKEN) {
+        console.warn('⚠️  DISCORD_TOKEN belum dikonfigurasi di .env.');
+        console.log('👉 Buka dashboard di http://localhost:3000/settings untuk memasukkan token bot.');
+    } else {
+        client.login(process.env.DISCORD_TOKEN).catch((err) => {
+            console.error('❌ Gagal login ke Discord:', err.message);
+            console.log('👉 Masukkan token baru di dashboard: http://localhost:3000/settings');
+        });
+    }
+});
