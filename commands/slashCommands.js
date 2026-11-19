@@ -320,6 +320,8 @@ async function handleSlashCommand(client, interaction) {
             const result = await sendRoleDm(interaction.member);
             if (result.success) {
                 return interaction.editReply('📩 Pesan pemilihan role berhasil dikirimkan ke DM kamu!');
+            } else if (result.reason === 'ALREADY_HAS_ROLE') {
+                return interaction.editReply('ℹ️ Kamu sudah memiliki role di server ini, jadi tidak perlu memilih role lagi.');
             } else if (result.reason === 'DM_CLOSED') {
                 return interaction.editReply('❌ Bot tidak dapat mengirim DM karena pesan langsung (DM) kamu ditutup di server ini.');
             } else {

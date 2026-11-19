@@ -3,7 +3,7 @@ const {
     PermissionFlagsBits
 } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
-const { sendRoleDm } = require('../events/guildMemberAdd');
+const { sendRoleDm, memberHasGenderRole } = require('../events/guildMemberAdd');
 
 // Kunci konkurensi: mencegah pengiriman broadcast ganda secara serentak di server yang sama
 const activeBroadcasts = new Set();
@@ -48,11 +48,11 @@ async function broadcastRoleDmToExistingMembers(guild, { forceAll = false, onPro
         let alreadyHadRoleCount = 0;
 
         for (const [, member] of humanMembers) {
-            const hasMen = menRoleId && member.roles.cache.has(menRoleId);
-            const hasWomen = womenRoleId && member.roles.cache.has(womenRoleId);
+            const alreadyHasRole = memberHasGenderRole(member);
             const alreadyDmed = dmedUserIds.has(member.user.id);
 
-            if (!forceAll && (hasMen || hasWomen || alreadyDmed)) {
+            // JIKA USER SUDAH MEMILIKI ROLE ATAU SUDAH PERNAH DI-DM, LEWATI (JANGAN DI-DM LAGI)
+            if (!forceAll && (alreadyHasRole || alreadyDmed)) {
                 alreadyHadRoleCount++;
             } else {
                 targets.push(member);

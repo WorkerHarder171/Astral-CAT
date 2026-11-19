@@ -41,13 +41,28 @@ function findExistingChannel(guild, keywords, type = ChannelType.GuildText) {
  * @param {string[]} keywords
  * @returns {import('discord.js').Role|null}
  */
-function findExistingRole(guild, keywords) {
+function findExistingRole(guild, keywords, isMan = false) {
     const normalizedKeywords = keywords.map(normalizeName);
 
+    // 1. Cek exact match terlebih dahulu
+    const exactMatch = guild.roles.cache.find(r => {
+        if (r.name === '@everyone') return false;
+        const normName = normalizeName(r.name);
+        if (isMan && (normName.includes('women') || normName.includes('woman') || normName.includes('wanita') || normName.includes('perempuan'))) {
+            return false;
+        }
+        return normalizedKeywords.some(kw => normName === kw);
+    });
+    if (exactMatch) return exactMatch;
+
+    // 2. Cek partial match dengan pengecualian khusus untuk Men (jangan cocokkan Superwomen dll)
     return guild.roles.cache.find(r => {
         if (r.name === '@everyone') return false;
         const normName = normalizeName(r.name);
-        return normalizedKeywords.some(kw => normName === kw || normName.includes(kw));
+        if (isMan && (normName.includes('women') || normName.includes('woman') || normName.includes('wanita') || normName.includes('perempuan'))) {
+            return false;
+        }
+        return normalizedKeywords.some(kw => normName.includes(kw));
     }) || null;
 }
 
@@ -138,7 +153,7 @@ async function executeAutoSetup(guild, executorMember, force = false) {
     | A. ROLE GENDER (Men & Women) - TAMPIL DI SIDEBAR KANAN (HOIST: TRUE)
     |--------------------------------------------------------------------------
     */
-    let menRole = findExistingRole(guild, ['men', 'man', 'pria', 'lakilaki', 'laki', 'cowok']);
+    let menRole = findExistingRole(guild, ['men', 'man', 'pria', 'lakilaki', 'laki', 'cowok'], true);
     if (!menRole) {
         menRole = await guild.roles.create({
             name: 'Men ♂️',
@@ -156,7 +171,7 @@ async function executeAutoSetup(guild, executorMember, force = false) {
         }
     }
 
-    let womenRole = findExistingRole(guild, ['women', 'woman', 'wanita', 'perempuan', 'cewek']);
+    let womenRole = findExistingRole(guild, ['women', 'woman', 'wanita', 'perempuan', 'cewek'], false);
     if (!womenRole) {
         womenRole = await guild.roles.create({
             name: 'Women ♀️',

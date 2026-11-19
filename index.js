@@ -155,6 +155,8 @@ client.on(
                 const result = await sendRoleDm(message.member);
                 if (result.success) {
                     await message.reply('📩 Pesan pemilihan role berhasil dikirimkan ke DM kamu! Silakan periksa chat pribadi.');
+                } else if (result.reason === 'ALREADY_HAS_ROLE') {
+                    await message.reply('ℹ️ Kamu sudah memiliki role di server ini, jadi tidak perlu memilih role lagi.');
                 } else if (result.reason === 'DM_CLOSED') {
                     await message.reply('❌ Bot tidak dapat mengirim DM karena pesan langsung (DM) kamu ditutup. Silakan buka **Privacy Settings** Discord kamu.');
                 } else {

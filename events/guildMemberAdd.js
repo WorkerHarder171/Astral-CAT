@@ -9,11 +9,48 @@ const { getGuildSettings, updateGuildSettings } = require('../utils/guildSetting
 const { findExistingChannel } = require('../commands/auto-setup');
 
 /**
+ * Memeriksa apakah seorang member sudah memiliki salah satu role gender di server
+ * @param {import('discord.js').GuildMember} member
+ * @returns {boolean}
+ */
+function memberHasGenderRole(member) {
+    if (!member || !member.roles) return false;
+    const settings = getGuildSettings(member.guild.id);
+    const menId = settings.roleMenId;
+    const womenId = settings.roleWomenId;
+
+    // 1. Cek berdasarkan ID role yang tersimpan di database settings
+    if (menId && member.roles.cache.has(menId)) return true;
+    if (womenId && member.roles.cache.has(womenId)) return true;
+
+    // 2. Cek berdasarkan kecocokan nama role yang dimiliki member
+    return member.roles.cache.some(r => {
+        if (r.name === '@everyone') return false;
+        const n = r.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Role pria (pastikan tidak mengandung kata 'women'/'woman')
+        if (['men', 'man', 'pria', 'cowok', 'laki', 'lakilaki'].includes(n) && !n.includes('women') && !n.includes('woman')) {
+            return true;
+        }
+        // Role wanita
+        if (['women', 'woman', 'wanita', 'cewek', 'perempuan'].includes(n)) {
+            return true;
+        }
+        return false;
+    });
+}
+
+/**
  * Mengirimkan pesan interaktif pemilihan role ke DM seorang member
  * @param {import('discord.js').GuildMember} member
  * @returns {Promise<{success: boolean, reason?: string}>}
  */
 async function sendRoleDm(member) {
+    // JIKA USER SUDAH MEMILIKI ROLE, JANGAN DI-DM!
+    if (memberHasGenderRole(member)) {
+        console.log(`ℹ️ [DM Guard] @${member.user.tag} sudah memiliki role gender di ${member.guild.name}. DM dibatalkan.`);
+        return { success: false, reason: 'ALREADY_HAS_ROLE' };
+    }
+
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle(`👋 Selamat Datang di ${member.guild.name}!`)
@@ -133,13 +170,21 @@ async function handleGuildMemberAdd(member) {
     | 2. GENDER SELECTION ONBOARDING DM (ANTI-REDUNDANSI)
     |--------------------------------------------------------------------------
     */
+    if (memberHasGenderRole(member)) {
+        console.log(`ℹ️ [Join Guard] @${member.user.tag} sudah memiliki role gender di ${member.guild.name}. Tidak perlu dikirimi DM.`);
+        return;
+    }
+
     const dmedUserIds = new Set(settings.dmedUserIds || []);
     if (!dmedUserIds.has(member.user.id)) {
-        await sendRoleDm(member);
-        dmedUserIds.add(member.user.id);
-        updateGuildSettings(member.guild.id, { dmedUserIds: Array.from(dmedUserIds) });
+        const res = await sendRoleDm(member);
+        if (res.success) {
+            dmedUserIds.add(member.user.id);
+            updateGuildSettings(member.guild.id, { dmedUserIds: Array.from(dmedUserIds) });
+        }
     }
 }
 
 module.exports = handleGuildMemberAdd;
 module.exports.sendRoleDm = sendRoleDm;
+module.exports.memberHasGenderRole = memberHasGenderRole;
