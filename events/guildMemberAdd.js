@@ -53,16 +53,20 @@ async function sendRoleDm(member) {
 
     const embed = new EmbedBuilder()
         .setColor(0x5865F2)
+        .setAuthor({
+            name: member.guild.name,
+            iconURL: member.guild.iconURL() || undefined
+        })
         .setTitle(`👋 Selamat Datang di ${member.guild.name}!`)
         .setDescription([
-            `Halo **${member.user.username}**! Senang kamu bergabung bersama kami.`,
+            `Halo **${member.user.username}**! Senang kamu bergabung bersama kami di server **${member.guild.name}**.`,
             '',
-            'Untuk melengkapi profil kamu dan menampilkannya di daftar anggota (sidebar kanan), silakan pilih role gender kamu dengan menekan tombol di bawah:',
+            `Untuk melengkapi profil kamu di server **${member.guild.name}** dan menampilkan status kamu di daftar anggota (sidebar kanan), silakan pilih role gender kamu dengan menekan tombol di bawah:`,
             '',
             '♂️ **Men** — Role untuk pria/laki-laki',
             '♀️ **Women** — Role untuk wanita/perempuan',
             '',
-            '✨ *Pilihan ini langsung aktif di server!*'
+            `✨ *Pilihan ini langsung aktif di server **${member.guild.name}**!*`
         ].join('\n'))
         .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setFooter({

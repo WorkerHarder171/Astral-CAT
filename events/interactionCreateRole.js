@@ -210,7 +210,7 @@ module.exports = async (client, interaction) => {
 
             return interaction.editReply({
                 content:
-                    '❌ Kamu tidak ditemukan sebagai member server.'
+                    `❌ Kamu tidak ditemukan sebagai member di server **${guild.name}**.`
             });
         }
 
@@ -239,7 +239,7 @@ module.exports = async (client, interaction) => {
         if (!targetRole) {
             return interaction.editReply({
                 content:
-                    `❌ Role **${genderName}** tidak ditemukan dan bot tidak memiliki izin **Manage Roles** untuk membuatnya secara otomatis.`
+                    `❌ Role **${genderName}** tidak ditemukan di server **${guild.name}** dan bot tidak memiliki izin **Manage Roles** untuk membuatnya secara otomatis.`
             });
         }
 
@@ -252,7 +252,7 @@ module.exports = async (client, interaction) => {
         if (member.roles.cache.has(targetRole.id)) {
             return interaction.editReply({
                 content:
-                    `⚠️ Kamu sudah memiliki role **${targetRole.name}**.`
+                    `⚠️ Kamu sudah memiliki role **${targetRole.name}** di server **${guild.name}**.`
             });
         }
 
@@ -268,11 +268,11 @@ module.exports = async (client, interaction) => {
         ) {
             return interaction.editReply({
                 content: [
-                    '⚠️ Kamu sudah memiliki role gender.',
+                    `⚠️ Kamu sudah memiliki role gender di server **${guild.name}**.`,
                     '',
                     'Kamu tidak dapat memilih role gender lainnya.',
                     '',
-                    'Jika terjadi kesalahan, silakan hubungi admin.'
+                    'Jika terjadi kesalahan, silakan hubungi admin server.'
                 ].join('\n')
             });
         }
@@ -288,7 +288,7 @@ module.exports = async (client, interaction) => {
         if (!botMember) {
             return interaction.editReply({
                 content:
-                    '❌ Bot member tidak ditemukan.'
+                    `❌ Bot member tidak ditemukan di server **${guild.name}**.`
             });
         }
 
@@ -303,7 +303,7 @@ module.exports = async (client, interaction) => {
         ) {
             return interaction.editReply({
                 content:
-                    '❌ Bot tidak memiliki permission **Manage Roles**.'
+                    `❌ Bot tidak memiliki permission **Manage Roles** di server **${guild.name}**.`
             });
         }
 
@@ -319,7 +319,7 @@ module.exports = async (client, interaction) => {
         ) {
             return interaction.editReply({
                 content: [
-                    `❌ Bot tidak dapat memberikan role **${targetRole.name}**.`,
+                    `❌ Bot tidak dapat memberikan role **${targetRole.name}** di server **${guild.name}**.`,
                     '',
                     'Pastikan role bot berada di atas role tersebut.'
                 ].join('\n')
@@ -372,7 +372,7 @@ module.exports = async (client, interaction) => {
 
             return interaction.editReply({
                 content:
-                    `✅ Berhasil mendapatkan role **${targetRole.name}**!`
+                    `✅ Berhasil mendapatkan role **${targetRole.name}** di server **${guild.name}**!`
             });
 
         } catch (error) {
@@ -383,7 +383,7 @@ module.exports = async (client, interaction) => {
 
             return interaction.editReply({
                 content: [
-                    '❌ Gagal memberikan role.',
+                    `❌ Gagal memberikan role di server **${guild.name}**.`,
                     '',
                     'Pastikan:',
                     '• Bot memiliki permission **Manage Roles**',
