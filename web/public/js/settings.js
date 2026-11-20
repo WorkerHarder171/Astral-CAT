@@ -46,6 +46,24 @@ async function loadSettings() {
             }
         }
 
+        // Admin Key Status & Session Recovery
+        const adminBadge = document.getElementById('admin-status-badge');
+        if (adminBadge) {
+            if (cfg.hasAdminKey) {
+                adminBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+                adminBadge.innerText = 'Tersedia & Terproteksi';
+            } else {
+                adminBadge.className = 'text-xs px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/30';
+                adminBadge.innerText = 'Belum Dikonfigurasi (Opsional)';
+            }
+        }
+
+        const savedAdminKey = sessionStorage.getItem('astral_admin_key');
+        const adminKeyInput = document.getElementById('adminKey');
+        if (savedAdminKey && adminKeyInput && !adminKeyInput.value) {
+            adminKeyInput.value = savedAdminKey;
+        }
+
         // Channels
         const welcomeChInput = document.getElementById('welcomeChannelId');
         if (welcomeChInput) welcomeChInput.value = cfg.welcomeChannelId || '';
@@ -144,12 +162,24 @@ async function handleSaveSettings(e) {
         formData.spotifyClientSecret = spotifySecretInput.value.trim();
     }
 
+    const adminKeyInput = document.getElementById('adminKey');
+    const adminKey = adminKeyInput ? adminKeyInput.value.trim() : '';
+    if (adminKey) {
+        formData.adminKey = adminKey;
+        sessionStorage.setItem('astral_admin_key', adminKey);
+    }
+
     try {
+        const headers = {
+            'Content-Type': 'application/json'
+        };
+        if (adminKey) {
+            headers['x-admin-key'] = adminKey;
+        }
+
         const res = await fetch('/api/settings', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers,
             body: JSON.stringify(formData)
         });
 

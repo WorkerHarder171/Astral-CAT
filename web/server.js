@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const { getConfig, updateConfig } = require('./configManager');
 const welcomeModule = require('../welcome');
+const { getCommandsCatalog } = require('../config/commandsCatalog');
 
 let discordClient = null;
 
@@ -9,6 +10,23 @@ const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+/**
+ * Middleware autentikasi admin untuk endpoint mutasi pengaturan
+ */
+function requireAdminAuth(req, res, next) {
+    const configuredKey = process.env.ADMIN_KEY?.trim();
+    if (configuredKey) {
+        const clientKey = req.headers['x-admin-key'] || req.body?.adminKey;
+        if (!clientKey || clientKey !== configuredKey) {
+            return res.status(401).json({
+                success: false,
+                message: 'Akses ditolak: Kunci Admin (Admin Key) tidak valid atau belum diisi.'
+            });
+        }
+    }
+    next();
+}
 
 // Serve static assets
 app.use(express.static(path.join(__dirname, 'public')));
@@ -84,7 +102,7 @@ app.get('/api/settings', (req, res) => {
 });
 
 // API: Update Config
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', requireAdminAuth, (req, res) => {
     try {
         const updated = updateConfig(req.body);
         res.json({
@@ -194,122 +212,7 @@ app.get('/api/preview/welcome', async (req, res) => {
 // API: List Commands
 app.get('/api/commands', (req, res) => {
     const prefix = process.env.PREFIX || '!';
-    const commands = [
-        {
-            category: 'Utilitas & Setup',
-            name: `${prefix}auto-setup`,
-            aliases: [`${prefix}autosetup`, `${prefix}setup-all`, `/auto-setup`],
-            description: 'Konfigurasi server otomatis 1-klik: membuat role Men & Women, channel sambutan, panel role, dan pengumuman.',
-            usage: `${prefix}auto-setup`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}play <judul / URL>`,
-            aliases: [`${prefix}p`],
-            description: 'Memutar audio musik dari YouTube atau lagu/playlist dari Spotify.',
-            usage: `${prefix}play Bohemian Rhapsody`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}skip`,
-            aliases: [`${prefix}s`],
-            description: 'Melompati lagu yang sedang diputar ke lagu berikutnya di antrean.',
-            usage: `${prefix}skip`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}pause`,
-            aliases: [],
-            description: 'Menjeda sementara pemutaran audio musik.',
-            usage: `${prefix}pause`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}resume`,
-            aliases: [],
-            description: 'Melanjutkan kembali lagu yang sedang dijeda.',
-            usage: `${prefix}resume`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}stop`,
-            aliases: [],
-            description: 'Menghentikan pemutaran musik dan membersihkan seluruh antrean lagu.',
-            usage: `${prefix}stop`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}leave`,
-            aliases: [`${prefix}dc`],
-            description: 'Memutuskan sambungan bot dari voice channel server.',
-            usage: `${prefix}leave`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}queue`,
-            aliases: [`${prefix}q`],
-            description: 'Melihat daftar urutan lagu yang berada di dalam antrean.',
-            usage: `${prefix}queue`
-        },
-        {
-            category: 'Musik',
-            name: `${prefix}nowplaying`,
-            aliases: [`${prefix}np`],
-            description: 'Menampilkan judul, durasi, dan informasi lagu yang sedang dimainkan.',
-            usage: `${prefix}nowplaying`
-        },
-        {
-            category: 'Sambutan (Welcome)',
-            name: `${prefix}setup-welcome <#channel>`,
-            aliases: [],
-            description: 'Mengatur channel tujuan pengiriman kartu banner sambutan member baru.',
-            usage: `${prefix}setup-welcome #welcome`
-        },
-        {
-            category: 'Sambutan (Welcome)',
-            name: `${prefix}test-welcome`,
-            aliases: [`${prefix}testwelcome`],
-            description: 'Menguji coba perenderan gambar banner kartu sambutan dengan avatar kamu.',
-            usage: `${prefix}test-welcome`
-        },
-        {
-            category: 'Role & Gender',
-            name: `${prefix}setup-role [#channel]`,
-            aliases: [`${prefix}setup-gender`],
-            description: 'Membuat panel tombol interaktif pemilihan role gender (Man ♂️ / Woman ♀️).',
-            usage: `${prefix}setup-role #pilih-role`
-        },
-        {
-            category: 'Pengumuman (Admin)',
-            name: `${prefix}announce <#channel>`,
-            aliases: [`${prefix}announcement`, `${prefix}pengumuman`],
-            description: 'Membuka modal template interaktif untuk mempublikasikan pengumuman berformat embed rapi.',
-            usage: `${prefix}announce #pengumuman`
-        },
-        {
-            category: 'Pengumuman (Admin)',
-            name: `${prefix}announce-all <#channel>`,
-            aliases: [],
-            description: 'Membuat pengumuman penting yang menyertakan mention broadcast ke semua anggota.',
-            usage: `${prefix}announce-all #announcement`
-        },
-        {
-            category: 'Utilitas',
-            name: `${prefix}ping`,
-            aliases: [`${prefix}cekping`, `${prefix}latency`],
-            description: 'Memeriksa kecepatan respon pesan bot dan latensi WebSocket Discord API.',
-            usage: `${prefix}ping`
-        },
-        {
-            category: 'Utilitas',
-            name: `${prefix}help`,
-            aliases: [`${prefix}bantuan`],
-            description: 'Menampilkan daftar ringkasan perintah yang tersedia di dalam bot.',
-            usage: `${prefix}help`
-        }
-    ];
-
-    res.json({ prefix, commands });
+    res.json({ prefix, commands: getCommandsCatalog(prefix) });
 });
 
 /**

@@ -18,6 +18,7 @@ function getConfig() {
         spotifyRedirectUrl: process.env.SPOTIFY_REDIRECT_URL?.trim() || 'http://localhost:3000/callback',
         hasDiscordToken: Boolean(process.env.DISCORD_TOKEN && process.env.DISCORD_TOKEN.trim().length > 25),
         hasSpotifySecret: Boolean(process.env.SPOTIFY_CLIENT_SECRET && process.env.SPOTIFY_CLIENT_SECRET.trim().length > 10),
+        hasAdminKey: Boolean(process.env.ADMIN_KEY && process.env.ADMIN_KEY.trim().length > 0),
         // Masked token preview (e.g. "MTU...89aB")
         tokenMasked: process.env.DISCORD_TOKEN && process.env.DISCORD_TOKEN.trim().length > 10
             ? `${process.env.DISCORD_TOKEN.trim().slice(0, 6)}••••••••${process.env.DISCORD_TOKEN.trim().slice(-4)}`
@@ -54,6 +55,9 @@ function updateConfig(updates) {
         map['SPOTIFY_CLIENT_SECRET'] = updates.spotifyClientSecret.trim();
     }
     if (updates.spotifyRedirectUrl !== undefined) map['SPOTIFY_REDIRECT_URL'] = updates.spotifyRedirectUrl.trim();
+    if (updates.adminKey !== undefined && updates.adminKey.trim()) {
+        map['ADMIN_KEY'] = updates.adminKey.trim();
+    }
 
     const updatedLines = lines.map(line => {
         const trimmed = line.trim();
