@@ -460,6 +460,16 @@ function handleShutdown(signal) {
 
     try {
         if (client) {
+            const { getVoiceConnection } = require('@discordjs/voice');
+            client.guilds.cache.forEach(guild => {
+                const conn = getVoiceConnection(guild.id);
+                if (conn) {
+                    try { conn.destroy(); } catch (_) {}
+                }
+            });
+            if (typeof musicModule.cleanupAllConnections === 'function') {
+                musicModule.cleanupAllConnections();
+            }
             client.destroy();
             console.log('🤖 Koneksi Discord Client berhasil ditutup.');
         }

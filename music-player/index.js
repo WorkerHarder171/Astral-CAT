@@ -504,7 +504,7 @@ async function play(
         return;
     }
 
-    const existingConnection =
+    let existingConnection =
         getVoiceConnection(
             message.guild.id
         );
@@ -518,6 +518,17 @@ async function play(
             '❌ Bot sedang berada di voice channel lain.'
         );
         return;
+    }
+
+    if (
+        existingConnection &&
+        (existingConnection.state.status === VoiceConnectionStatus.Destroyed ||
+            existingConnection.state.status === VoiceConnectionStatus.Disconnected)
+    ) {
+        try {
+            existingConnection.destroy();
+        } catch (_) {}
+        existingConnection = null;
     }
 
     let song;
@@ -550,12 +561,26 @@ async function play(
             guildId: message.guild.id,
             adapterCreator:
                 message.guild.voiceAdapterCreator,
-            selfDeaf: true
+            selfDeaf: true,
+            daveEncryption: false
         });
 
     if (isNewConnection) {
         connection.on('stateChange', (oldState, newState) => {
             console.log(`[VoiceConnection] Server ${message.guild.name} (${message.guild.id}): ${oldState.status} -> ${newState.status}`);
+        });
+
+        connection.on(VoiceConnectionStatus.Disconnected, async () => {
+            try {
+                await Promise.race([
+                    entersState(connection, VoiceConnectionStatus.Signalling, 5_000),
+                    entersState(connection, VoiceConnectionStatus.Connecting, 5_000)
+                ]);
+            } catch {
+                try {
+                    connection.destroy();
+                } catch (_) {}
+            }
         });
 
         connection.on('error', error => {
@@ -644,6 +669,12 @@ async function play(
 
         currentSongs.delete(guildId);
         cleanupProcesses(guildId);
+
+        if (connection && connection.state.status !== VoiceConnectionStatus.Ready) {
+            try {
+                connection.destroy();
+            } catch (_) {}
+        }
 
         await message.reply({
             embeds: [
@@ -892,6 +923,19 @@ async function nowPlaying(message) {
     });
 }
 
+function cleanupAllConnections() {
+    for (const [guildId, player] of players.entries()) {
+        try {
+            cleanupProcesses(guildId);
+            player.stop(true);
+        } catch (_) {}
+    }
+    players.clear();
+    queues.clear();
+    currentSongs.clear();
+    advancing.clear();
+}
+
 module.exports = {
     play,
     skip,
@@ -901,6 +945,7 @@ module.exports = {
     queue,
     nowPlaying,
     resolveSong,
+    cleanupAllConnections,
     searchYoutube: yt.searchYoutube,
     createAudioStream: yt.createAudioStream,
     getAudioStream: yt.getAudioStream
