@@ -319,34 +319,37 @@ app.get('/api/commands', (req, res) => {
  */
 function startWebServer(client) {
     discordClient = client;
-    const port = parseInt(process.env.PORT || '3000', 10);
+    const initialPort = parseInt(process.env.PORT || '3000', 10);
+    const maxPortAttempts = 5;
 
     return new Promise((resolve) => {
-        const server = app.listen(port, () => {
-            console.log('========================================');
-            console.log(`🌐 Dashboard Website aktif di: http://localhost:${port}`);
-            console.log(`📜 Privacy Policy tersedia di: http://localhost:${port}/privacy`);
-            console.log(`⚙️  Pengaturan Bot tersedia di: http://localhost:${port}/settings`);
-            console.log('========================================');
-            resolve(server);
-        });
-
-        server.on('error', (err) => {
-            if (err.code === 'EADDRINUSE') {
-                console.error('========================================');
-                console.error(`⚠️  PERINGATAN: Bot Astral Cat sudah berjalan di background (PM2/Port ${port})!`);
-                console.error('👉 Proses ini dihentikan otomatis agar bot tidak merespon ganda (redundant/duplikat).');
-                console.error('💡 Gunakan perintah: `npx pm2 logs` atau `npx pm2 restart astral-cat`');
-                console.error('========================================');
-                if (discordClient) {
-                    try { discordClient.destroy(); } catch (_) {}
-                }
-                process.exit(0);
-            } else {
-                console.error('❌ Web server error:', err);
+        function tryListen(port, attempt = 0) {
+            const server = app.listen(port, () => {
+                console.log('========================================');
+                console.log(`🌐 Dashboard Website aktif di: http://localhost:${port}`);
+                console.log(`📜 Privacy Policy tersedia di: http://localhost:${port}/privacy`);
+                console.log(`⚙️  Pengaturan Bot tersedia di: http://localhost:${port}/settings`);
+                console.log('========================================');
                 resolve(server);
-            }
-        });
+            });
+
+            server.on('error', (err) => {
+                if (err.code === 'EADDRINUSE') {
+                    if (attempt < maxPortAttempts) {
+                        console.warn(`⚠️  Port ${port} sedang digunakan aplikasi lain. Mencoba port alternatif: ${port + 1}...`);
+                        tryListen(port + 1, attempt + 1);
+                    } else {
+                        console.warn(`⚠️  Seluruh port dashboard (${initialPort}-${port}) sedang digunakan. Web dashboard dilewati.`);
+                        resolve(null);
+                    }
+                } else {
+                    console.error('❌ Web server error:', err);
+                    resolve(null);
+                }
+            });
+        }
+
+        tryListen(initialPort);
     });
 }
 

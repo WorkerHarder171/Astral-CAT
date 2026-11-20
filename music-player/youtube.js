@@ -3,10 +3,45 @@ const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
 const ytdlp = require('youtube-dl-exec');
+const yts = require('yt-search');
 const staticFfmpeg = require('ffmpeg-static');
 
 // Gunakan ffmpeg-static jika ada dan valid; jika tidak, gunakan ffmpeg bawaan OS (mis. /usr/bin/ffmpeg)
 const ffmpegPath = (staticFfmpeg && fs.existsSync(staticFfmpeg)) ? staticFfmpeg : 'ffmpeg';
+
+/**
+ * Memastikan PATH selalu memuat path sistem standar Linux (/usr/bin, /usr/local/bin, dsb)
+ * agar child process seperti python3, ffmpeg, yt-dlp selalu dapat ditemukan meskipun
+ * environment PM2 atau systemd mengalami pemotongan PATH (misal karena spasi pada nama direktori).
+ */
+function getSanitizedEnv() {
+    const defaultPaths = [
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+        '/usr/local/sbin',
+        '/usr/sbin'
+    ];
+    const currentPaths = (process.env.PATH || '').split(':').filter(Boolean);
+    const mergedPath = Array.from(new Set([...currentPaths, ...defaultPaths])).join(':');
+
+    return {
+        ...process.env,
+        PATH: mergedPath
+    };
+}
+
+function extractVideoId(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.hostname.includes('youtu.be')) {
+            return parsed.pathname.slice(1).split('?')[0];
+        }
+        return parsed.searchParams.get('v');
+    } catch {
+        return null;
+    }
+}
 
 function isYoutubeUrl(value) {
     try {
@@ -102,7 +137,8 @@ function createFFmpegStream(inputStream) {
             'pipe:1'
         ],
         {
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: getSanitizedEnv()
         }
     );
 
@@ -128,6 +164,8 @@ function createFFmpegStream(inputStream) {
 }
 
 function createAudioStream(url) {
+    const sanitizedEnv = getSanitizedEnv();
+
     const ytProcess = ytdlp.exec(
         url,
         {
@@ -139,7 +177,8 @@ function createAudioStream(url) {
             extractorArgs: 'youtube:player_client=android'
         },
         {
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
+            env: sanitizedEnv
         }
     );
 
@@ -160,7 +199,8 @@ function createAudioStream(url) {
             'pipe:1'
         ],
         {
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
+            env: sanitizedEnv
         }
     );
 
@@ -207,6 +247,26 @@ function createAudioStream(url) {
 }
 
 async function searchYoutube(query) {
+    // 1. Prioritaskan yt-search (Pure Node.js, sangat cepat ~300ms, dan 100% bebas ketergantungan python/binary)
+    try {
+        const searchResults = await yts(query);
+        const video = searchResults?.videos?.[0];
+
+        if (video) {
+            return {
+                source: 'youtube',
+                id: video.videoId,
+                title: video.title,
+                url: video.url,
+                duration: Number(video.seconds || 0),
+                thumbnail: video.thumbnail || null
+            };
+        }
+    } catch (ytsErr) {
+        console.warn('⚠️ [yt-search fallback to yt-dlp]:', ytsErr.message);
+    }
+
+    // 2. Fallback ke yt-dlp jika yt-search tidak menemukan hasil
     const result = await ytdlp(
         `ytsearch1:${query}`,
         {
@@ -216,6 +276,9 @@ async function searchYoutube(query) {
             flatPlaylist: true,
             jsRuntimes: 'node',
             extractorArgs: 'youtube:player_client=android'
+        },
+        {
+            env: getSanitizedEnv()
         }
     );
 
@@ -236,6 +299,28 @@ async function searchYoutube(query) {
 }
 
 async function getYoutubeInfo(url) {
+    // 1. Coba resolusi cepat dengan yt-search jika ada videoId
+    const videoId = extractVideoId(url);
+    if (videoId) {
+        try {
+            const video = await yts({ videoId });
+            if (video && video.title) {
+                return {
+                    source: 'youtube',
+                    id: video.videoId || videoId,
+                    title: video.title,
+                    url: video.url || url,
+                    duration: Number(video.seconds || 0),
+                    thumbnail: video.thumbnail || null,
+                    formats: []
+                };
+            }
+        } catch (ytsErr) {
+            console.warn('⚠️ [yt-search getInfo fallback to yt-dlp]:', ytsErr.message);
+        }
+    }
+
+    // 2. Fallback ke yt-dlp jika direct ID lookup tidak berhasil
     const result = await ytdlp(
         url,
         {
@@ -244,6 +329,9 @@ async function getYoutubeInfo(url) {
             skipDownload: true,
             jsRuntimes: 'node',
             extractorArgs: 'youtube:player_client=android'
+        },
+        {
+            env: getSanitizedEnv()
         }
     );
 
