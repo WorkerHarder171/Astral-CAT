@@ -172,9 +172,7 @@ function createAudioStream(url) {
             output: '-',
             format: 'bestaudio/best',
             quiet: true,
-            noWarnings: true,
-            jsRuntimes: 'node',
-            extractorArgs: 'youtube:player_client=android'
+            noWarnings: true
         },
         {
             stdio: ['ignore', 'pipe', 'pipe'],
@@ -190,6 +188,7 @@ function createAudioStream(url) {
             'error',
             '-i',
             'pipe:0',
+            '-vn',
             '-f',
             's16le',
             '-ar',
@@ -273,9 +272,7 @@ async function searchYoutube(query) {
             dumpSingleJson: true,
             noWarnings: true,
             skipDownload: true,
-            flatPlaylist: true,
-            jsRuntimes: 'node',
-            extractorArgs: 'youtube:player_client=android'
+            flatPlaylist: true
         },
         {
             env: getSanitizedEnv()
@@ -326,9 +323,7 @@ async function getYoutubeInfo(url) {
         {
             dumpSingleJson: true,
             noWarnings: true,
-            skipDownload: true,
-            jsRuntimes: 'node',
-            extractorArgs: 'youtube:player_client=android'
+            skipDownload: true
         },
         {
             env: getSanitizedEnv()

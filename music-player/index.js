@@ -9,7 +9,9 @@ const {
     createAudioResource,
     AudioPlayerStatus,
     NoSubscriberBehavior,
-    StreamType
+    StreamType,
+    VoiceConnectionStatus,
+    entersState
 } = require('@discordjs/voice');
 
 const yt = require('./youtube');
@@ -540,6 +542,7 @@ async function play(
     song.requester =
         message.author.toString();
 
+    const isNewConnection = !existingConnection;
     const connection =
         existingConnection ||
         joinVoiceChannel({
@@ -549,6 +552,16 @@ async function play(
                 message.guild.voiceAdapterCreator,
             selfDeaf: true
         });
+
+    if (isNewConnection) {
+        connection.on('stateChange', (oldState, newState) => {
+            console.log(`[VoiceConnection] Server ${message.guild.name} (${message.guild.id}): ${oldState.status} -> ${newState.status}`);
+        });
+
+        connection.on('error', error => {
+            console.error(`[VoiceConnection Error] ${message.guild.name}:`, error.message);
+        });
+    }
 
     let player =
         players.get(
@@ -603,6 +616,10 @@ async function play(
     }
 
     try {
+        if (connection.state.status !== VoiceConnectionStatus.Ready) {
+            await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+        }
+
         await playSong(
             guildId,
             song
@@ -838,7 +855,8 @@ async function nowPlaying(message) {
     const player =
         players.get(guildId);
 
-    if (!current || !player) {
+    if (!current || !player || player.state.status === AudioPlayerStatus.Idle) {
+        currentSongs.delete(guildId);
         await message.reply(
             '❌ Tidak ada lagu yang sedang diputar.'
         );
