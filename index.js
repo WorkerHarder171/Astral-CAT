@@ -21,6 +21,7 @@ const {
     autoInitializeGuild,
     autoInitializeAllGuilds
 } = require('./utils/guildInitializer');
+const { syncSave } = require('./utils/guildSettings');
 
 const {
     registerSlashCommands,
@@ -443,3 +444,32 @@ startWebServer(client).then(() => {
         });
     }
 });
+
+/*
+|--------------------------------------------------------------------------
+| GRACEFUL SHUTDOWN HANDLERS
+|--------------------------------------------------------------------------
+*/
+function handleShutdown(signal) {
+    console.log(`\n🛑 Menerima sinyal ${signal}. Memulai penutupan aman (Graceful Shutdown)...`);
+    try {
+        syncSave();
+    } catch (err) {
+        console.error('Gagal menyimpan guilds.json saat shutdown:', err);
+    }
+
+    try {
+        if (client) {
+            client.destroy();
+            console.log('🤖 Koneksi Discord Client berhasil ditutup.');
+        }
+    } catch (err) {
+        console.error('Error saat menutup client Discord:', err);
+    }
+
+    console.log('✅ Astral Cat berhasil dinonaktifkan dengan aman.');
+    process.exit(0);
+}
+
+process.on('SIGINT', () => handleShutdown('SIGINT'));
+process.on('SIGTERM', () => handleShutdown('SIGTERM'));

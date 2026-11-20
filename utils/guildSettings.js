@@ -1,4 +1,5 @@
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 
 const dataDir = path.join(__dirname, '..', '.data');
@@ -20,11 +21,52 @@ try {
     settingsCache = {};
 }
 
-function save() {
+// Queue dan flag untuk atomic non-blocking write
+let isWriting = false;
+let pendingWrite = false;
+
+/**
+ * Menyimpan data ke file secara atomik dan non-blocking (unique tmp file -> rename)
+ * Menjamin file tidak pernah korup jika terjadi crash di tengah proses penulisan.
+ */
+async function atomicSave() {
+    if (isWriting) {
+        pendingWrite = true;
+        return;
+    }
+
+    isWriting = true;
+    const tmp = `${filePath}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
     try {
-        fs.writeFileSync(filePath, JSON.stringify(settingsCache, null, 2), 'utf8');
+        const payload = JSON.stringify(settingsCache, null, 2);
+        await fsPromises.writeFile(tmp, payload, 'utf8');
+        await fsPromises.rename(tmp, filePath);
     } catch (err) {
-        console.error('Error menyimpan guilds.json:', err);
+        console.error('Error menyimpan guilds.json secara atomik:', err);
+        await fsPromises.unlink(tmp).catch(() => {});
+    } finally {
+        isWriting = false;
+        if (pendingWrite) {
+            pendingWrite = false;
+            atomicSave();
+        }
+    }
+}
+
+/**
+ * Flush sinkron saat bot dimatikan mendadak (SIGINT/SIGTERM)
+ */
+function syncSave() {
+    const tmp = `${filePath}.${process.pid}.${Date.now()}.sync.tmp`;
+    try {
+        const payload = JSON.stringify(settingsCache, null, 2);
+        fs.writeFileSync(tmp, payload, 'utf8');
+        fs.renameSync(tmp, filePath);
+    } catch (err) {
+        console.error('Error menyimpan guilds.json (sync):', err);
+        try {
+            if (fs.existsSync(tmp)) fs.unlinkSync(tmp);
+        } catch {}
     }
 }
 
@@ -44,7 +86,7 @@ function getGuildSettings(guildId) {
             roleWomenId: '',
             prefix: process.env.PREFIX || '!'
         };
-        save();
+        atomicSave();
     }
     return settingsCache[guildId];
 }
@@ -59,7 +101,7 @@ function updateGuildSettings(guildId, updates) {
     if (!guildId) return {};
     const current = getGuildSettings(guildId);
     settingsCache[guildId] = { ...current, ...updates };
-    save();
+    atomicSave();
     return settingsCache[guildId];
 }
 
@@ -73,5 +115,6 @@ function getAllGuildSettings() {
 module.exports = {
     getGuildSettings,
     updateGuildSettings,
-    getAllGuildSettings
+    getAllGuildSettings,
+    syncSave
 };
