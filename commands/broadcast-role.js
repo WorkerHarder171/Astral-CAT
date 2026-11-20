@@ -3,7 +3,8 @@ const {
     PermissionFlagsBits
 } = require('discord.js');
 const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
-const { sendRoleDm, memberHasGenderRole } = require('../events/guildMemberAdd');
+const { sendRoleDm } = require('../events/guildMemberAdd');
+const { memberHasGenderRole } = require('../utils/roleManager');
 
 // Kunci konkurensi: mencegah pengiriman broadcast ganda secara serentak di server yang sama
 const activeBroadcasts = new Set();

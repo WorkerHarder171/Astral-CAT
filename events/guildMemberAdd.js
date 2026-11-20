@@ -7,37 +7,7 @@ const {
 const welcomeModule = require('../welcome');
 const { getGuildSettings, updateGuildSettings } = require('../utils/guildSettings');
 const { findExistingChannel } = require('../commands/auto-setup');
-
-/**
- * Memeriksa apakah seorang member sudah memiliki salah satu role gender di server
- * @param {import('discord.js').GuildMember} member
- * @returns {boolean}
- */
-function memberHasGenderRole(member) {
-    if (!member || !member.roles) return false;
-    const settings = getGuildSettings(member.guild.id);
-    const menId = settings.roleMenId;
-    const womenId = settings.roleWomenId;
-
-    // 1. Cek berdasarkan ID role yang tersimpan di database settings
-    if (menId && member.roles.cache.has(menId)) return true;
-    if (womenId && member.roles.cache.has(womenId)) return true;
-
-    // 2. Cek berdasarkan kecocokan nama role yang dimiliki member
-    return member.roles.cache.some(r => {
-        if (r.name === '@everyone') return false;
-        const n = r.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-        // Role pria (pastikan tidak mengandung kata 'women'/'woman')
-        if (['men', 'man', 'pria', 'cowok', 'laki', 'lakilaki'].includes(n) && !n.includes('women') && !n.includes('woman')) {
-            return true;
-        }
-        // Role wanita
-        if (['women', 'woman', 'wanita', 'cewek', 'perempuan'].includes(n)) {
-            return true;
-        }
-        return false;
-    });
-}
+const { memberHasGenderRole } = require('../utils/roleManager');
 
 /**
  * Mengirimkan pesan interaktif pemilihan role ke DM seorang member
